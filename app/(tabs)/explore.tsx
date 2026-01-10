@@ -1,112 +1,241 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  SafeAreaView,
+  StatusBar, ScrollView,
+  TouchableOpacity,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Task, TaskFormData } from '@/types';
+import { StorageService } from '@/services/storage-service';
+import { NotificationService } from '@/services/notification-service';
+import { CalendarView } from '@/components/calendar-view';
+import { TaskCard } from '@/components/task-card';
+import { AddTaskModal } from '@/components/add-task-modal';
+import { EmptyState } from '@/components/empty-state';
+import { Colors } from '@/constants/theme';
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+export default function CalendarScreen() {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [modalVisible, setModalVisible] = useState(false);
 
-export default function TabTwoScreen() {
+  useEffect(() => {
+    loadTasks();
+  }, []);
+
+  const loadTasks = async () => {
+    try {
+      const loadedTasks = await StorageService.loadTasks();
+      setTasks(loadedTasks);
+    } catch (error) {
+      console.error('Error loading tasks:', error);
+    }
+  };
+
+  const getTasksForSelectedDate = (): Task[] => {
+    return tasks.filter(task => {
+      const taskDate = new Date(task.dateTime);
+      return (
+        taskDate.getDate() === selectedDate.getDate() &&
+        taskDate.getMonth() === selectedDate.getMonth() &&
+        taskDate.getFullYear() === selectedDate.getFullYear()
+      );
+    }).sort((a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime());
+  };
+
+  const handleSaveTask = async (taskData: TaskFormData) => {
+    try {
+      const combinedDateTime = new Date(taskData.date);
+      combinedDateTime.setHours(taskData.time.getHours());
+      combinedDateTime.setMinutes(taskData.time.getMinutes());
+
+      const newTask: Task = {
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        title: taskData.title,
+        description: taskData.description,
+        dateTime: combinedDateTime.toISOString(),
+        completed: false,
+        createdAt: new Date().toISOString(),
+      };
+
+      const notificationId = await NotificationService.scheduleNotification(newTask);
+      if (notificationId) {
+        newTask.notificationId = notificationId;
+      }
+
+      await StorageService.addTask(newTask);
+      setTasks(prevTasks => [...prevTasks, newTask]);
+      setModalVisible(false);
+    } catch (error) {
+      console.error('Error saving task:', error);
+    }
+  };
+
+  const handleToggleComplete = async (taskId: string) => {
+    try {
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) return;
+
+      const updatedTask: Task = {
+        ...task,
+        completed: !task.completed,
+      };
+
+      if (updatedTask.completed && task.notificationId) {
+        await NotificationService.cancelNotification(task.notificationId);
+      } else if (!updatedTask.completed) {
+        const notificationId = await NotificationService.scheduleNotification(updatedTask);
+        if (notificationId) {
+          updatedTask.notificationId = notificationId;
+        }
+      }
+
+      await StorageService.updateTask(updatedTask);
+      setTasks(prevTasks =>
+        prevTasks.map(t => (t.id === taskId ? updatedTask : t))
+      );
+    } catch (error) {
+      console.error('Error toggling task completion:', error);
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) return;
+
+      if (task.notificationId) {
+        await NotificationService.cancelNotification(task.notificationId);
+      }
+
+      await StorageService.deleteTask(taskId);
+      setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
+    } catch (error) {
+      console.error('Error deleting task:', error);
+    }
+  };
+
+  const tasksForDate = getTasksForSelectedDate();
+  const formattedDate = selectedDate.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="light-content" backgroundColor={Colors.background} />
+
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Calendar</Text>
+        </View>
+
+        <ScrollView showsVerticalScrollIndicator={false}>
+          {/* Calendar */}
+          <CalendarView
+            tasks={tasks}
+            selectedDate={selectedDate}
+            onDateSelect={setSelectedDate}
+          />
+
+          {/* Selected Date Section */}
+          <View style={styles.selectedDateSection}>
+            <View style={styles.selectedDateHeader}>
+              <Text style={styles.selectedDateText}>{formattedDate}</Text>
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={() => setModalVisible(true)}
+              >
+                <Ionicons name="add-circle" size={24} color={Colors.primary} />
+                <Text style={styles.addButtonText}>Add Task</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Tasks for Selected Date */}
+            <View style={styles.tasksContainer}>
+              {tasksForDate.length > 0 ? (
+                tasksForDate.map(task => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    onToggleComplete={handleToggleComplete}
+                    onDelete={handleDeleteTask}
+                  />
+                ))
+              ) : (
+                <EmptyState
+                  icon="calendar-outline"
+                  message="No tasks for this date"
+                  submessage="Tap the Add Task button to create one"
+                />
+              )}
+            </View>
+          </View>
+        </ScrollView>
+
+        {/* Add Task Modal */}
+        <AddTaskModal
+          visible={modalVisible}
+          prefilledDate={selectedDate}
+          onSave={handleSaveTask}
+          onCancel={() => setModalVisible(false)}
         />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+  safeArea: {
+    flex: 1,
+    backgroundColor: Colors.background,
   },
-  titleContainer: {
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  header: {
+    paddingHorizontal: 16,
+    paddingTop: 48, // Increased from 16 to avoid status bar overlap
+    paddingBottom: 12,
+  },
+  headerTitle: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  selectedDateSection: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  selectedDateHeader: {
     flexDirection: 'row',
-    gap: 8,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  selectedDateText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  addButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  tasksContainer: {
+    paddingBottom: 100,
   },
 });

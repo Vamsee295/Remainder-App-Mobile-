@@ -3,28 +3,59 @@
  * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
  */
 
+/**
+ * Dark Theme Only - Remainder App
+ * This app uses a pure dark theme with white bold text
+ */
+
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
-
 export const Colors = {
-  light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
-  },
-  dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
-  },
+  // Main backgrounds
+  background: '#121212',
+  surface: '#1E1E1E',
+  surfaceVariant: '#2C2C2C',
+
+  // Text colors
+  text: '#FFFFFF',
+  textSecondary: '#B3B3B3',
+  textDisabled: '#666666',
+
+  // Primary colors (accents) - Light Blue Theme
+  primary: '#4FC3F7',          // Light blue
+  primaryVariant: '#29B6F6',   // Darker light blue
+  secondary: '#03DAC6',
+  secondaryVariant: '#00C4B4',
+
+  // Status colors
+  success: '#4CAF50',
+  error: '#CF6679',
+  warning: '#FFC107',
+  info: '#2196F3',
+
+  // UI elements
+  border: '#333333',
+  divider: '#2C2C2C',
+  overlay: 'rgba(0, 0, 0, 0.7)',
+
+  // Tab colors
+  tabIconDefault: '#9BA1A6',
+  tabIconSelected: '#4FC3F7',  // Light blue
+  tabBackground: '#1E1E1E',
+
+  // Card colors
+  cardBackground: '#1E1E1E',
+  cardBorder: '#333333',
+
+  // Input colors
+  inputBackground: '#2C2C2C',
+  inputBorder: '#444444',
+  inputBorderFocus: '#BB86FC',
+
+  // Button colors
+  buttonPrimary: '#4FC3F7',    // Light blue
+  buttonSecondary: '#03DAC6',
+  buttonDisabled: '#444444',
 };
 
 export const Fonts = Platform.select({
