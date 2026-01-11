@@ -56,9 +56,10 @@ export class NotificationService {
     }
 
     /**
-     * Schedule a notification for a task
+     * Schedule a notification for a task (with auto-snooze)
+     * Schedules 3 notifications: main + 2 auto-snoozes (5 and 10 mins later)
      */
-    static async scheduleNotification(task: Task): Promise<string | null> {
+    static async scheduleNotification(task: Task): Promise<string[] | null> {
         try {
             const hasPermission = await this.requestPermissions();
 
@@ -76,7 +77,10 @@ export class NotificationService {
                 return null;
             }
 
-            const notificationId = await Notifications.scheduleNotificationAsync({
+            const notificationIds: string[] = [];
+
+            // Schedule main notification
+            const mainId = await Notifications.scheduleNotificationAsync({
                 content: {
                     title: task.title,
                     body: task.description || 'Your reminder is due',
@@ -89,9 +93,44 @@ export class NotificationService {
                     date: taskDate,
                 },
             });
+            notificationIds.push(mainId);
 
-            console.log(`Notification scheduled: ${notificationId} for task: ${task.title}`);
-            return notificationId;
+            // Schedule 1st auto-snooze (+5 minutes)
+            const snooze1Date = new Date(taskDate.getTime() + 5 * 60000);
+            const snooze1Id = await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: `⏰ ${task.title}`,
+                    body: task.description || 'Reminder (Auto-Snoozed)',
+                    data: { taskId: task.id },
+                    sound: true,
+                    priority: Notifications.AndroidNotificationPriority.HIGH,
+                },
+                trigger: {
+                    type: Notifications.SchedulableTriggerInputTypes.DATE,
+                    date: snooze1Date,
+                },
+            });
+            notificationIds.push(snooze1Id);
+
+            // Schedule 2nd auto-snooze (+10 minutes)
+            const snooze2Date = new Date(taskDate.getTime() + 10 * 60000);
+            const snooze2Id = await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: `⏰⏰ ${task.title}`,
+                    body: task.description || 'Reminder (Auto-Snoozed)',
+                    data: { taskId: task.id },
+                    sound: true,
+                    priority: Notifications.AndroidNotificationPriority.HIGH,
+                },
+                trigger: {
+                    type: Notifications.SchedulableTriggerInputTypes.DATE,
+                    date: snooze2Date,
+                },
+            });
+            notificationIds.push(snooze2Id);
+
+            console.log(`Scheduled 3 notifications for task: ${task.title}`);
+            return notificationIds;
         } catch (error) {
             console.error('Error scheduling notification:', error);
             return null;
@@ -107,6 +146,20 @@ export class NotificationService {
             console.log(`Notification cancelled: ${notificationId}`);
         } catch (error) {
             console.error('Error cancelling notification:', error);
+        }
+    }
+
+    /**
+     * Cancel multiple scheduled notifications
+     */
+    static async cancelMultipleNotifications(notificationIds: string[]): Promise<void> {
+        try {
+            await Promise.all(
+                notificationIds.map(id => Notifications.cancelScheduledNotificationAsync(id))
+            );
+            console.log(`Cancelled ${notificationIds.length} notifications`);
+        } catch (error) {
+            console.error('Error cancelling notifications:', error);
         }
     }
 

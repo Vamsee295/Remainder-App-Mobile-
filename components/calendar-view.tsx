@@ -164,11 +164,13 @@ export function CalendarView({ tasks, selectedDate, onDateSelect }: CalendarView
 
 const styles = StyleSheet.create({
     container: {
-        backgroundColor: Colors.surface,
+        backgroundColor: Colors.cardBackground,
         borderRadius: 16,
         padding: 16,
         marginHorizontal: 16,
         marginBottom: 16,
+        borderWidth: 1,
+        borderColor: Colors.border,
     },
     header: {
         flexDirection: 'row',
@@ -209,26 +211,29 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         padding: 4,
         marginBottom: 8,
+        marginHorizontal: 2,
     },
     dayCellSelected: {
         backgroundColor: Colors.primary,
         borderRadius: 8,
     },
     dayCellToday: {
-        borderWidth: 2,
-        borderColor: Colors.secondary,
+        backgroundColor: Colors.primary,
         borderRadius: 8,
+        opacity: 0.8,
     },
     dayText: {
-        fontSize: 14,
+        fontSize: 15,
         fontWeight: '600',
         color: Colors.text,
     },
     dayTextSelected: {
-        color: Colors.background,
+        color: '#FFFFFF',
+        fontWeight: '700',
     },
     dayTextToday: {
-        color: Colors.secondary,
+        color: '#FFFFFF',
+        fontWeight: '700',
     },
     taskIndicatorsContainer: {
         flexDirection: 'row',

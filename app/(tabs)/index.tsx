@@ -41,6 +41,22 @@ export default function TasksScreen() {
     return NotificationService.setupNotificationListeners(
       (notification) => {
         console.log('Received notification:', notification);
+
+        // Auto-snooze logic: if task is still incomplete after 30 seconds, snooze it
+        const taskId = notification.request.content.data?.taskId as string;
+        if (taskId) {
+          setTimeout(async () => {
+            // Reload tasks to get latest state
+            const currentTasks = await StorageService.loadTasks();
+            const task = currentTasks.find(t => t.id === taskId);
+
+            // If task exists and is not completed, auto-snooze it
+            if (task && !task.completed) {
+              console.log('Auto-snoozing task:', task.title);
+              handleSnoozeTask(taskId);
+            }
+          }, 30000); // 30 seconds delay
+        }
       },
       (response) => {
         console.log('User tapped notification:', response);
@@ -92,15 +108,15 @@ export default function TasksScreen() {
           dateTime: combinedDateTime.toISOString(),
         };
 
-        // Cancel old notification
-        if (editingTask.notificationId) {
-          await NotificationService.cancelNotification(editingTask.notificationId);
+        // Cancel old notifications
+        if (editingTask.notificationIds) {
+          await NotificationService.cancelMultipleNotifications(editingTask.notificationIds);
         }
 
-        // Schedule new notification
-        const notificationId = await NotificationService.scheduleNotification(updatedTask);
-        if (notificationId) {
-          updatedTask.notificationId = notificationId;
+        // Schedule new notifications (3 total)
+        const notificationIds = await NotificationService.scheduleNotification(updatedTask);
+        if (notificationIds) {
+          updatedTask.notificationIds = notificationIds;
         }
 
         await StorageService.updateTask(updatedTask);
@@ -118,10 +134,10 @@ export default function TasksScreen() {
           createdAt: new Date().toISOString(),
         };
 
-        // Schedule notification
-        const notificationId = await NotificationService.scheduleNotification(newTask);
-        if (notificationId) {
-          newTask.notificationId = notificationId;
+        // Schedule notifications (3 total)
+        const notificationIds = await NotificationService.scheduleNotification(newTask);
+        if (notificationIds) {
+          newTask.notificationIds = notificationIds;
         }
 
         await StorageService.addTask(newTask);
@@ -145,15 +161,15 @@ export default function TasksScreen() {
         completed: !task.completed,
       };
 
-      // Cancel notification if completing task
-      if (updatedTask.completed && task.notificationId) {
-        await NotificationService.cancelNotification(task.notificationId);
+      // Cancel notifications if completing task
+      if (updatedTask.completed && task.notificationIds) {
+        await NotificationService.cancelMultipleNotifications(task.notificationIds);
       }
-      // Reschedule notification if uncompleting task
+      // Reschedule notifications if uncompleting task
       else if (!updatedTask.completed) {
-        const notificationId = await NotificationService.scheduleNotification(updatedTask);
-        if (notificationId) {
-          updatedTask.notificationId = notificationId;
+        const notificationIds = await NotificationService.scheduleNotification(updatedTask);
+        if (notificationIds) {
+          updatedTask.notificationIds = notificationIds;
         }
       }
 
@@ -171,9 +187,9 @@ export default function TasksScreen() {
       const task = tasks.find(t => t.id === taskId);
       if (!task) return;
 
-      // Cancel notification
-      if (task.notificationId) {
-        await NotificationService.cancelNotification(task.notificationId);
+      // Cancel notifications
+      if (task.notificationIds) {
+        await NotificationService.cancelMultipleNotifications(task.notificationIds);
       }
 
       await StorageService.deleteTask(taskId);
@@ -183,12 +199,45 @@ export default function TasksScreen() {
     }
   };
 
+  const handleSnoozeTask = async (taskId: string) => {
+    try {
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) return;
+
+      const now = new Date();
+      const snoozeTime = new Date(now.getTime() + 5 * 60000); // 5 minutes from now
+
+      const updatedTask: Task = {
+        ...task,
+        dateTime: snoozeTime.toISOString(),
+      };
+
+      // Cancel old notifications
+      if (task.notificationIds) {
+        await NotificationService.cancelMultipleNotifications(task.notificationIds);
+      }
+
+      // Schedule new notifications
+      const notificationIds = await NotificationService.scheduleNotification(updatedTask);
+      if (notificationIds) {
+        updatedTask.notificationIds = notificationIds;
+      }
+
+      await StorageService.updateTask(updatedTask);
+      setTasks(prevTasks =>
+        prevTasks.map(t => (t.id === taskId ? updatedTask : t))
+      );
+    } catch (error) {
+      console.error('Error snoozing task:', error);
+    }
+  };
+
   const activeTasks = tasks.filter(t => !t.completed).length;
   const completedTasks = tasks.filter(t => t.completed).length;
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.background} />
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
 
       <View style={styles.container}>
         {/* Header */}
@@ -238,6 +287,7 @@ export default function TasksScreen() {
           onToggleComplete={handleToggleComplete}
           onDelete={handleDeleteTask}
           onEdit={handleEditTask}
+          onSnooze={handleSnoozeTask}
           onRefresh={handleRefresh}
           refreshing={refreshing}
         />

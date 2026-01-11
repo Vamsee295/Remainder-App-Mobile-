@@ -18,6 +18,7 @@ interface TaskListProps {
     onToggleComplete: (taskId: string) => void;
     onDelete: (taskId: string) => void;
     onEdit: (task: Task) => void;
+    onSnooze: (taskId: string) => void;
     onRefresh: () => void;
     refreshing?: boolean;
 }
@@ -33,6 +34,7 @@ export function TaskList({
     onToggleComplete,
     onDelete,
     onEdit,
+    onSnooze,
     onRefresh,
     refreshing = false,
 }: TaskListProps) {
@@ -167,6 +169,7 @@ export function TaskList({
                     onToggleComplete={onToggleComplete}
                     onDelete={onDelete}
                     onEdit={onEdit}
+                    onSnooze={onSnooze}
                 />
             )}
             renderSectionHeader={({ section: { title } }) => (

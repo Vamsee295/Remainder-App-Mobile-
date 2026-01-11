@@ -16,9 +16,10 @@ interface TaskCardProps {
     onToggleComplete: (taskId: string) => void;
     onDelete: (taskId: string) => void;
     onEdit?: (task: Task) => void;
+    onSnooze?: (taskId: string) => void;
 }
 
-export function TaskCard({ task, onToggleComplete, onDelete, onEdit }: TaskCardProps) {
+export function TaskCard({ task, onToggleComplete, onDelete, onEdit, onSnooze }: TaskCardProps) {
     const scaleAnim = React.useRef(new Animated.Value(1)).current;
 
     const handlePress = () => {
@@ -81,6 +82,13 @@ export function TaskCard({ task, onToggleComplete, onDelete, onEdit }: TaskCardP
 
     const isPastDue = new Date(task.dateTime) < new Date() && !task.completed;
 
+    const handleSnooze = () => {
+        if (onSnooze) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            onSnooze(task.id);
+        }
+    };
+
     return (
         <Animated.View style={[styles.container, { transform: [{ scale: scaleAnim }] }]}>
             <TouchableOpacity
@@ -104,6 +112,16 @@ export function TaskCard({ task, onToggleComplete, onDelete, onEdit }: TaskCardP
                             )}
                         </View>
                     </TouchableOpacity>
+
+                    {/* Calendar-style date display */}
+                    <View style={styles.calendarDateBox}>
+                        <Text style={styles.calendarMonth}>
+                            {new Date(task.dateTime).toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}
+                        </Text>
+                        <Text style={styles.calendarDay}>
+                            {new Date(task.dateTime).getDate()}
+                        </Text>
+                    </View>
 
                     <View style={styles.textContainer}>
                         <Text
@@ -146,13 +164,24 @@ export function TaskCard({ task, onToggleComplete, onDelete, onEdit }: TaskCardP
                         </View>
                     </View>
 
-                    <TouchableOpacity
-                        style={styles.deleteButton}
-                        onPress={handleDelete}
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                        <Ionicons name="trash-outline" size={20} color={Colors.error} />
-                    </TouchableOpacity>
+                    <View style={styles.actionsContainer}>
+                        {isPastDue && onSnooze && (
+                            <TouchableOpacity
+                                style={styles.actionButton}
+                                onPress={handleSnooze}
+                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            >
+                                <Ionicons name="alarm-outline" size={22} color={Colors.warning} />
+                            </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={handleDelete}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                            <Ionicons name="trash-outline" size={20} color={Colors.error} />
+                        </TouchableOpacity>
+                    </View>
                 </View>
             </TouchableOpacity>
         </Animated.View>
@@ -184,6 +213,28 @@ const styles = StyleSheet.create({
     },
     checkbox: {
         marginRight: 12,
+    },
+    calendarDateBox: {
+        width: 50,
+        height: 50,
+        backgroundColor: Colors.primary,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
+    },
+    calendarMonth: {
+        fontSize: 9,
+        fontWeight: '600',
+        color: '#FFFFFF',
+        letterSpacing: 0.5,
+        marginBottom: 2,
+    },
+    calendarDay: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#FFFFFF',
+        lineHeight: 22,
     },
     checkboxCircle: {
         width: 24,
@@ -237,7 +288,16 @@ const styles = StyleSheet.create({
         textDecorationLine: 'line-through',
         color: Colors.textDisabled,
     },
-    deleteButton: {
+    actionsContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginLeft: 8,
+    },
+    actionButton: {
+        padding: 8,
+        marginLeft: 4,
+    },
+    deleteButton: { // Deprecated but leaving for now if referenced elsewhere, though removing usage
         padding: 8,
         marginLeft: 8,
     },

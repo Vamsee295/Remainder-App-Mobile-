@@ -16,6 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Task, TaskFormData } from '@/types';
 import { Colors } from '@/constants/theme';
+import { CustomCalendarPicker } from './custom-calendar-picker';
+import { CustomTimePicker } from './custom-time-picker';
 
 interface AddTaskModalProps {
     visible: boolean;
@@ -115,16 +117,28 @@ export function AddTaskModal({
     };
 
     const handleDateChange = (event: any, date?: Date) => {
-        setShowDatePicker(Platform.OS === 'ios');
+        if (Platform.OS === 'android') {
+            setShowDatePicker(false);
+        }
         if (date) {
             setSelectedDate(date);
+            if (Platform.OS === 'android') {
+                // Auto-close on Android after selection
+                setShowDatePicker(false);
+            }
         }
     };
 
     const handleTimeChange = (event: any, date?: Date) => {
-        setShowTimePicker(Platform.OS === 'ios');
+        if (Platform.OS === 'android') {
+            setShowTimePicker(false);
+        }
         if (date) {
             setSelectedTime(date);
+            if (Platform.OS === 'android') {
+                // Auto-close on Android after selection
+                setShowTimePicker(false);
+            }
         }
     };
 
@@ -205,13 +219,27 @@ export function AddTaskModal({
                                     style={styles.pickerButton}
                                     onPress={() => {
                                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                        setShowDatePicker(true);
+                                        setShowDatePicker(!showDatePicker);
+                                        setShowTimePicker(false);
                                     }}
                                 >
                                     <Ionicons name="calendar-outline" size={20} color={Colors.primary} />
                                     <Text style={styles.pickerButtonText}>{formatDate(selectedDate)}</Text>
-                                    <Ionicons name="chevron-down" size={20} color={Colors.textSecondary} />
+                                    <Ionicons name={showDatePicker ? "chevron-up" : "chevron-down"} size={20} color={Colors.textSecondary} />
                                 </TouchableOpacity>
+
+                                {/* Custom Calendar Picker */}
+                                {showDatePicker && (
+                                    <View style={styles.customPickerContainer}>
+                                        <CustomCalendarPicker
+                                            selectedDate={selectedDate}
+                                            onDateChange={(date) => {
+                                                setSelectedDate(date);
+                                            }}
+                                            minimumDate={new Date()}
+                                        />
+                                    </View>
+                                )}
                             </View>
 
                             {/* Time Picker */}
@@ -221,40 +249,28 @@ export function AddTaskModal({
                                     style={styles.pickerButton}
                                     onPress={() => {
                                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                        setShowTimePicker(true);
+                                        setShowTimePicker(!showTimePicker);
+                                        setShowDatePicker(false);
                                     }}
                                 >
                                     <Ionicons name="time-outline" size={20} color={Colors.primary} />
                                     <Text style={styles.pickerButtonText}>{formatTime(selectedTime)}</Text>
-                                    <Ionicons name="chevron-down" size={20} color={Colors.textSecondary} />
+                                    <Ionicons name={showTimePicker ? "chevron-up" : "chevron-down"} size={20} color={Colors.textSecondary} />
                                 </TouchableOpacity>
+
+                                {/* Custom Time Picker */}
+                                {showTimePicker && (
+                                    <View style={styles.customPickerContainer}>
+                                        <CustomTimePicker
+                                            selectedTime={selectedTime}
+                                            onTimeChange={(time) => {
+                                                setSelectedTime(time);
+                                            }}
+                                        />
+                                    </View>
+                                )}
                                 {errors.dateTime && <Text style={styles.errorText}>{errors.dateTime}</Text>}
                             </View>
-
-                            {/* Date Picker Component */}
-                            {showDatePicker && (
-                                <DateTimePicker
-                                    value={selectedDate}
-                                    mode="date"
-                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                                    onChange={handleDateChange}
-                                    minimumDate={new Date()}
-                                    textColor={Colors.text}
-                                    themeVariant="dark"
-                                />
-                            )}
-
-                            {/* Time Picker Component */}
-                            {showTimePicker && (
-                                <DateTimePicker
-                                    value={selectedTime}
-                                    mode="time"
-                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                                    onChange={handleTimeChange}
-                                    textColor={Colors.text}
-                                    themeVariant="dark"
-                                />
-                            )}
                         </ScrollView>
 
                         {/* Footer Buttons */}
@@ -384,6 +400,19 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: Colors.text,
     },
+    customPickerContainer: {
+        backgroundColor: Colors.surface,
+        borderRadius: 12,
+        marginTop: 8,
+        paddingVertical: 12,
+        borderWidth: 1,
+        borderColor: Colors.border,
+        overflow: 'hidden',
+    },
+    picker: {
+        backgroundColor: Colors.surface,
+        height: 180,
+    },
     footer: {
         flexDirection: 'row',
         paddingHorizontal: 20,
@@ -413,6 +442,9 @@ const styles = StyleSheet.create({
         backgroundColor: 'transparent',
         borderWidth: 1,
         borderColor: Colors.border,
+        paddingVertical: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     buttonSecondaryText: {
         fontSize: 16,

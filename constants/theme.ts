@@ -12,50 +12,50 @@ import { Platform } from 'react-native';
 
 export const Colors = {
   // Main backgrounds
-  background: '#121212',
-  surface: '#1E1E1E',
-  surfaceVariant: '#2C2C2C',
+  background: '#FFFFFF',
+  surface: '#F5F5F5',
+  surfaceVariant: '#E0E0E0',
 
   // Text colors
-  text: '#FFFFFF',
-  textSecondary: '#B3B3B3',
-  textDisabled: '#666666',
+  text: '#000000',
+  textSecondary: '#666666',
+  textDisabled: '#9E9E9E',
 
   // Primary colors (accents) - Light Blue Theme
-  primary: '#4FC3F7',          // Light blue
-  primaryVariant: '#29B6F6',   // Darker light blue
+  primary: '#007AFF',          // Standard blue
+  primaryVariant: '#0056D2',   // Darker blue
   secondary: '#03DAC6',
-  secondaryVariant: '#00C4B4',
+  secondaryVariant: '#018786',
 
   // Status colors
-  success: '#4CAF50',
-  error: '#CF6679',
-  warning: '#FFC107',
-  info: '#2196F3',
+  success: '#34C759',
+  error: '#FF3B30',
+  warning: '#FFCC00',
+  info: '#007AFF',
 
   // UI elements
-  border: '#333333',
-  divider: '#2C2C2C',
-  overlay: 'rgba(0, 0, 0, 0.7)',
+  border: '#E0E0E0',
+  divider: '#F0F0F0',
+  overlay: 'rgba(0, 0, 0, 0.5)',
 
   // Tab colors
-  tabIconDefault: '#9BA1A6',
-  tabIconSelected: '#4FC3F7',  // Light blue
-  tabBackground: '#1E1E1E',
+  tabIconDefault: '#8E8E93',
+  tabIconSelected: '#007AFF',
+  tabBackground: '#FFFFFF',
 
   // Card colors
-  cardBackground: '#1E1E1E',
-  cardBorder: '#333333',
+  cardBackground: '#FFFFFF',
+  cardBorder: '#E0E0E0',
 
   // Input colors
-  inputBackground: '#2C2C2C',
-  inputBorder: '#444444',
-  inputBorderFocus: '#BB86FC',
+  inputBackground: '#F5F5F5',
+  inputBorder: '#E0E0E0',
+  inputBorderFocus: '#007AFF',
 
   // Button colors
-  buttonPrimary: '#4FC3F7',    // Light blue
+  buttonPrimary: '#007AFF',
   buttonSecondary: '#03DAC6',
-  buttonDisabled: '#444444',
+  buttonDisabled: '#E0E0E0',
 };
 
 export const Fonts = Platform.select({

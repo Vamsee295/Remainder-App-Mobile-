@@ -4,7 +4,7 @@ export interface Task {
   description?: string;
   dateTime: string; // ISO 8601 format
   completed: boolean;
-  notificationId?: string;
+  notificationIds?: string[]; // Array to store multiple notification IDs
   createdAt: string;
 }
 
@@ -20,4 +20,15 @@ export type TaskFilter = 'active' | 'completed' | 'all';
 export interface TaskSection {
   title: string;
   data: Task[];
+}
+
+export interface TodoItem {
+  id: string;
+  text: string;
+  completed: boolean;
+  createdAt: string;
+}
+
+export interface TodoFormData {
+  text: string;
 }

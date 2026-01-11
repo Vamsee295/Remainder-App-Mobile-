@@ -24,7 +24,35 @@ export default function CalendarScreen() {
 
   useEffect(() => {
     loadTasks();
+    setupNotificationListeners();
   }, []);
+
+  const setupNotificationListeners = () => {
+    return NotificationService.setupNotificationListeners(
+      (notification) => {
+        console.log('Received notification:', notification);
+
+        // Auto-snooze logic: if task is still incomplete after 30 seconds, snooze it
+        const taskId = notification.request.content.data?.taskId as string;
+        if (taskId) {
+          setTimeout(async () => {
+            // Reload tasks to get latest state
+            const currentTasks = await StorageService.loadTasks();
+            const task = currentTasks.find(t => t.id === taskId);
+
+            // If task exists and is not completed, auto-snooze it
+            if (task && !task.completed) {
+              console.log('Auto-snoozing task:', task.title);
+              handleSnoozeTask(taskId);
+            }
+          }, 30000); // 30 seconds delay
+        }
+      },
+      (response) => {
+        console.log('User tapped notification:', response);
+      }
+    );
+  };
 
   const loadTasks = async () => {
     try {
@@ -61,9 +89,9 @@ export default function CalendarScreen() {
         createdAt: new Date().toISOString(),
       };
 
-      const notificationId = await NotificationService.scheduleNotification(newTask);
-      if (notificationId) {
-        newTask.notificationId = notificationId;
+      const notificationIds = await NotificationService.scheduleNotification(newTask);
+      if (notificationIds) {
+        newTask.notificationIds = notificationIds;
       }
 
       await StorageService.addTask(newTask);
@@ -84,12 +112,12 @@ export default function CalendarScreen() {
         completed: !task.completed,
       };
 
-      if (updatedTask.completed && task.notificationId) {
-        await NotificationService.cancelNotification(task.notificationId);
+      if (updatedTask.completed && task.notificationIds) {
+        await NotificationService.cancelMultipleNotifications(task.notificationIds);
       } else if (!updatedTask.completed) {
-        const notificationId = await NotificationService.scheduleNotification(updatedTask);
-        if (notificationId) {
-          updatedTask.notificationId = notificationId;
+        const notificationIds = await NotificationService.scheduleNotification(updatedTask);
+        if (notificationIds) {
+          updatedTask.notificationIds = notificationIds;
         }
       }
 
@@ -107,14 +135,45 @@ export default function CalendarScreen() {
       const task = tasks.find(t => t.id === taskId);
       if (!task) return;
 
-      if (task.notificationId) {
-        await NotificationService.cancelNotification(task.notificationId);
+      if (task.notificationIds) {
+        await NotificationService.cancelMultipleNotifications(task.notificationIds);
       }
 
       await StorageService.deleteTask(taskId);
       setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
     } catch (error) {
       console.error('Error deleting task:', error);
+    }
+  };
+
+  const handleSnoozeTask = async (taskId: string) => {
+    try {
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) return;
+
+      const now = new Date();
+      const snoozeTime = new Date(now.getTime() + 5 * 60000); // 5 minutes from now
+
+      const updatedTask: Task = {
+        ...task,
+        dateTime: snoozeTime.toISOString(),
+      };
+
+      if (task.notificationIds) {
+        await NotificationService.cancelMultipleNotifications(task.notificationIds);
+      }
+
+      const notificationIds = await NotificationService.scheduleNotification(updatedTask);
+      if (notificationIds) {
+        updatedTask.notificationIds = notificationIds;
+      }
+
+      await StorageService.updateTask(updatedTask);
+      setTasks(prevTasks =>
+        prevTasks.map(t => (t.id === taskId ? updatedTask : t))
+      );
+    } catch (error) {
+      console.error('Error snoozing task:', error);
     }
   };
 
@@ -128,7 +187,7 @@ export default function CalendarScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.background} />
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
 
       <View style={styles.container}>
         {/* Header */}
@@ -166,6 +225,7 @@ export default function CalendarScreen() {
                     task={task}
                     onToggleComplete={handleToggleComplete}
                     onDelete={handleDeleteTask}
+                    onSnooze={handleSnoozeTask}
                   />
                 ))
               ) : (
