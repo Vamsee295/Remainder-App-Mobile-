@@ -8,12 +8,14 @@ import {
     TouchableOpacity,
     Platform,
     KeyboardAvoidingView,
+    ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { TodoFormData } from '@/types';
 import { Colors } from '@/constants/theme';
+import { CustomCalendarPicker } from './custom-calendar-picker';
 
 interface AddTodoModalProps {
     visible: boolean;
@@ -27,11 +29,15 @@ export function AddTodoModal({
     onCancel,
 }: AddTodoModalProps) {
     const [text, setText] = useState('');
+    const [deadline, setDeadline] = useState<Date | undefined>(undefined);
+    const [showDatePicker, setShowDatePicker] = useState(false);
     const [error, setError] = useState('');
 
     useEffect(() => {
         if (visible) {
             setText('');
+            setDeadline(undefined);
+            setShowDatePicker(false);
             setError('');
         }
     }, [visible]);
@@ -44,8 +50,17 @@ export function AddTodoModal({
         }
 
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        onSave({ text: text.trim() });
+        onSave({ text: text.trim(), deadline });
         setText('');
+        setDeadline(undefined);
+    };
+
+    const formatDate = (date: Date) => {
+        return date.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+        });
     };
 
     const handleCancel = () => {
@@ -75,7 +90,7 @@ export function AddTodoModal({
                             </TouchableOpacity>
                         </View>
 
-                        <View style={styles.content}>
+                        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
                             {/* Text Input */}
                             <View style={styles.inputGroup}>
                                 <Text style={styles.label}>What do you need to do?</Text>
@@ -94,7 +109,45 @@ export function AddTodoModal({
                                 />
                                 {error && <Text style={styles.errorText}>{error}</Text>}
                             </View>
-                        </View>
+
+                            {/* Deadline Picker */}
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>Deadline (Optional)</Text>
+                                <TouchableOpacity
+                                    style={styles.dateButton}
+                                    onPress={() => {
+                                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                        setShowDatePicker(!showDatePicker);
+                                    }}
+                                >
+                                    <Ionicons name="calendar-outline" size={20} color={Colors.primary} />
+                                    <Text style={styles.dateButtonText}>
+                                        {deadline ? formatDate(deadline) : 'Set deadline'}
+                                    </Text>
+                                    {deadline && (
+                                        <TouchableOpacity
+                                            onPress={() => setDeadline(undefined)}
+                                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                        >
+                                            <Ionicons name="close-circle" size={18} color={Colors.textSecondary} />
+                                        </TouchableOpacity>
+                                    )}
+                                </TouchableOpacity>
+
+                                {showDatePicker && (
+                                    <View style={styles.calendarContainer}>
+                                        <CustomCalendarPicker
+                                            selectedDate={deadline || new Date()}
+                                            onDateChange={(date) => {
+                                                setDeadline(date);
+                                                setShowDatePicker(false);
+                                            }}
+                                            minimumDate={new Date()}
+                                        />
+                                    </View>
+                                )}
+                            </View>
+                        </ScrollView>
 
                         {/* Footer Buttons */}
                         <View style={styles.footer}>
@@ -201,6 +254,32 @@ const styles = StyleSheet.create({
         color: Colors.error,
         marginTop: 4,
         fontWeight: '600',
+    },
+    dateButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: Colors.inputBackground,
+        borderWidth: 1,
+        borderColor: Colors.inputBorder,
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        gap: 12,
+    },
+    dateButtonText: {
+        flex: 1,
+        fontSize: 16,
+        fontWeight: '600',
+        color: Colors.text,
+    },
+    calendarContainer: {
+        backgroundColor: Colors.surface,
+        borderRadius: 12,
+        marginTop: 8,
+        paddingVertical: 12,
+        borderWidth: 1,
+        borderColor: Colors.border,
+        overflow: 'hidden',
     },
     footer: {
         flexDirection: 'row',

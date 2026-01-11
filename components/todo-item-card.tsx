@@ -44,6 +44,30 @@ export function TodoItemCard({ todo, onToggleComplete, onDelete }: TodoItemCardP
         onDelete(todo.id);
     };
 
+    const formatDeadline = () => {
+        if (!todo.deadline) return null;
+
+        const deadlineDate = new Date(todo.deadline);
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const deadline = new Date(deadlineDate.getFullYear(), deadlineDate.getMonth(), deadlineDate.getDate());
+
+        const daysDiff = Math.floor((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (daysDiff < 0) {
+            return { text: 'Overdue', color: Colors.error, icon: 'alert-circle' as const };
+        } else if (daysDiff === 0) {
+            return { text: 'Today', color: Colors.warning, icon: 'today' as const };
+        } else if (daysDiff === 1) {
+            return { text: 'Tomorrow', color: Colors.primary, icon: 'calendar' as const };
+        } else {
+            const formatted = deadlineDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            return { text: formatted, color: Colors.textSecondary, icon: 'calendar-outline' as const };
+        }
+    };
+
+    const deadlineInfo = formatDeadline();
+
     return (
         <Animated.View style={[styles.container, { transform: [{ scale: scaleAnim }] }]}>
             <View style={[styles.card, todo.completed && styles.cardCompleted]}>
@@ -59,15 +83,26 @@ export function TodoItemCard({ todo, onToggleComplete, onDelete }: TodoItemCardP
                     </View>
                 </TouchableOpacity>
 
-                <Text
-                    style={[
-                        styles.text,
-                        todo.completed && styles.textCompleted,
-                    ]}
-                    numberOfLines={2}
-                >
-                    {todo.text}
-                </Text>
+                <View style={styles.content}>
+                    <Text
+                        style={[
+                            styles.text,
+                            todo.completed && styles.textCompleted,
+                        ]}
+                        numberOfLines={2}
+                    >
+                        {todo.text}
+                    </Text>
+
+                    {deadlineInfo && (
+                        <View style={styles.deadlineContainer}>
+                            <Ionicons name={deadlineInfo.icon} size={12} color={deadlineInfo.color} />
+                            <Text style={[styles.deadlineText, { color: deadlineInfo.color }]}>
+                                {deadlineInfo.text}
+                            </Text>
+                        </View>
+                    )}
+                </View>
 
                 <TouchableOpacity
                     style={styles.deleteButton}
@@ -113,15 +148,29 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.success,
         borderColor: Colors.success,
     },
-    text: {
+    content: {
         flex: 1,
+        marginRight: 8,
+    },
+    text: {
         fontSize: 16,
         fontWeight: '600',
         color: Colors.text,
+        marginBottom: 4,
     },
     textCompleted: {
         textDecorationLine: 'line-through',
         color: Colors.textSecondary,
+    },
+    deadlineContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        marginTop: 4,
+    },
+    deadlineText: {
+        fontSize: 12,
+        fontWeight: '600',
     },
     deleteButton: {
         padding: 8,

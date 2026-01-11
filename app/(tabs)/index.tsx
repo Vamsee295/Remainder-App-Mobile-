@@ -7,17 +7,22 @@ import {
   StatusBar,
   TouchableOpacity,
 } from 'react-native';
-import { Task, TaskFilter, TaskFormData } from '@/types';
+import { Ionicons } from '@expo/vector-icons';
+import { Task, TaskFilter, TaskFormData, TaskCategory, TaskPriority } from '@/types';
 import { StorageService } from '@/services/storage-service';
 import { NotificationService } from '@/services/notification-service';
+import { RecurrenceService } from '@/services/recurrence-service';
 import { TaskList } from '@/components/task-list';
 import { AddTaskModal } from '@/components/add-task-modal';
 import { FloatingActionButton } from '@/components/floating-action-button';
+import { FilterDropdown } from '@/components/filter-dropdown';
 import { Colors } from '@/constants/theme';
 
 export default function TasksScreen() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [filter, setFilter] = useState<TaskFilter>('active');
+  const [selectedCategory, setSelectedCategory] = useState<TaskCategory | 'all'>('all');
+  const [selectedPriority, setSelectedPriority] = useState<TaskPriority | 'all'>('all');
   const [modalVisible, setModalVisible] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
@@ -106,6 +111,10 @@ export default function TasksScreen() {
           title: taskData.title,
           description: taskData.description,
           dateTime: combinedDateTime.toISOString(),
+          category: taskData.category,
+          priority: taskData.priority,
+          recurrence: taskData.recurrence,
+          recurrenceInterval: taskData.recurrenceInterval,
         };
 
         // Cancel old notifications
@@ -132,6 +141,10 @@ export default function TasksScreen() {
           dateTime: combinedDateTime.toISOString(),
           completed: false,
           createdAt: new Date().toISOString(),
+          category: taskData.category,
+          priority: taskData.priority,
+          recurrence: taskData.recurrence,
+          recurrenceInterval: taskData.recurrenceInterval,
         };
 
         // Schedule notifications (3 total)
@@ -141,6 +154,12 @@ export default function TasksScreen() {
         }
 
         await StorageService.addTask(newTask);
+
+        // Save task as a suggestion for future use
+        console.log('Saving task as suggestion:', newTask);
+        await StorageService.addTaskSuggestion(newTask);
+        console.log('Task suggestion saved successfully');
+
         setTasks(prevTasks => [...prevTasks, newTask]);
       }
 
@@ -164,6 +183,22 @@ export default function TasksScreen() {
       // Cancel notifications if completing task
       if (updatedTask.completed && task.notificationIds) {
         await NotificationService.cancelMultipleNotifications(task.notificationIds);
+
+        // If task is recurring and being completed, create next occurrence
+        if (RecurrenceService.isRecurringTask(task)) {
+          const nextTask = RecurrenceService.createNextOccurrence(task);
+          if (nextTask) {
+            // Schedule notifications for the next occurrence
+            const notificationIds = await NotificationService.scheduleNotification(nextTask);
+            if (notificationIds) {
+              nextTask.notificationIds = notificationIds;
+            }
+
+            // Save the next occurrence
+            await StorageService.addTask(nextTask);
+            setTasks(prevTasks => [...prevTasks, nextTask]);
+          }
+        }
       }
       // Reschedule notifications if uncompleting task
       else if (!updatedTask.completed) {
@@ -232,8 +267,39 @@ export default function TasksScreen() {
     }
   };
 
-  const activeTasks = tasks.filter(t => !t.completed).length;
-  const completedTasks = tasks.filter(t => t.completed).length;
+  // Apply category and priority filters
+  const getFilteredAndSortedTasks = (): Task[] => {
+    let filtered = [...tasks];
+
+    // Filter by category
+    if (selectedCategory !== 'all') {
+      filtered = filtered.filter(t => t.category === selectedCategory);
+    }
+
+    // Sort by priority
+    if (selectedPriority !== 'all') {
+      const priorityOrder = { high: 0, medium: 1, low: 2 };
+      filtered = filtered.sort((a, b) => {
+        const aPriority = a.priority || 'low';
+        const bPriority = b.priority || 'low';
+
+        if (selectedPriority === aPriority && selectedPriority !== bPriority) {
+          return -1;
+        }
+        if (selectedPriority === bPriority && selectedPriority !== aPriority) {
+          return 1;
+        }
+
+        return priorityOrder[aPriority] - priorityOrder[bPriority];
+      });
+    }
+
+    return filtered;
+  };
+
+  const filteredTasks = getFilteredAndSortedTasks();
+  const activeTasks = filteredTasks.filter(t => !t.completed).length;
+  const completedTasks = filteredTasks.filter(t => t.completed).length;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -242,11 +308,22 @@ export default function TasksScreen() {
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <View>
-            <Text style={styles.headerTitle}>My Tasks</Text>
-            <Text style={styles.headerSubtitle}>
-              {activeTasks} active • {completedTasks} completed
-            </Text>
+          <View style={styles.headerTop}>
+            <View style={styles.headerContent}>
+              <Ionicons name="list" size={32} color={Colors.primary} />
+              <View style={styles.headerText}>
+                <Text style={styles.headerTitle}>My Tasks</Text>
+                <Text style={styles.headerSubtitle}>
+                  {activeTasks} active • {completedTasks} completed
+                </Text>
+              </View>
+            </View>
+            <FilterDropdown
+              selectedCategory={selectedCategory}
+              selectedPriority={selectedPriority}
+              onCategoryChange={setSelectedCategory}
+              onPriorityChange={setSelectedPriority}
+            />
           </View>
         </View>
 
@@ -282,7 +359,7 @@ export default function TasksScreen() {
 
         {/* Task List */}
         <TaskList
-          tasks={tasks}
+          tasks={filteredTasks}
           filter={filter}
           onToggleComplete={handleToggleComplete}
           onDelete={handleDeleteTask}
@@ -320,12 +397,23 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   header: {
+    paddingHorizontal: 16,
+    paddingTop: 48,
+    paddingBottom: 12,
+    gap: 12,
+  },
+  headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  headerContent: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 48, // Increased from 16 to avoid status bar overlap
-    paddingBottom: 12,
+    gap: 12,
+  },
+  headerText: {
+    flex: 1,
   },
   headerTitle: {
     fontSize: 32,

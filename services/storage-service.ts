@@ -1,8 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Task, TodoItem } from '@/types';
+import { Task, TodoItem, TaskSuggestion } from '@/types';
 
 const TASKS_STORAGE_KEY = '@remainder_tasks';
 const TODOS_STORAGE_KEY = '@remainder_todos';
+const SUGGESTIONS_STORAGE_KEY = '@remainder_task_suggestions';
 
 export class StorageService {
     /**
@@ -176,6 +177,109 @@ export class StorageService {
         } catch (error) {
             console.error('Error deleting todo:', error);
             throw new Error('Failed to delete todo');
+        }
+    }
+
+    // ===== TASK SUGGESTIONS =====
+
+    /**
+     * Load task suggestions from AsyncStorage
+     */
+    static async loadTaskSuggestions(): Promise<TaskSuggestion[]> {
+        try {
+            const jsonValue = await AsyncStorage.getItem(SUGGESTIONS_STORAGE_KEY);
+
+            if (jsonValue === null) {
+                return [];
+            }
+
+            const suggestions: TaskSuggestion[] = JSON.parse(jsonValue);
+            return suggestions;
+        } catch (error) {
+            console.error('Error loading task suggestions:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Save task suggestions to AsyncStorage
+     */
+    static async saveTaskSuggestions(suggestions: TaskSuggestion[]): Promise<void> {
+        try {
+            const jsonValue = JSON.stringify(suggestions);
+            await AsyncStorage.setItem(SUGGESTIONS_STORAGE_KEY, jsonValue);
+        } catch (error) {
+            console.error('Error saving task suggestions:', error);
+            throw new Error('Failed to save task suggestions');
+        }
+    }
+
+    /**
+     * Add a task suggestion from a task
+     */
+    static async addTaskSuggestion(task: Task): Promise<void> {
+        try {
+            const suggestions = await this.loadTaskSuggestions();
+            const taskDate = new Date(task.dateTime);
+            const hour = taskDate.getHours();
+            const minute = taskDate.getMinutes();
+
+            // Check if a similar suggestion exists (same title and time)
+            const existingIndex = suggestions.findIndex(
+                s => s.title.toLowerCase() === task.title.toLowerCase() &&
+                    s.hour === hour &&
+                    s.minute === minute
+            );
+
+            if (existingIndex !== -1) {
+                // Update existing suggestion
+                suggestions[existingIndex] = {
+                    ...suggestions[existingIndex],
+                    description: task.description,
+                    usageCount: suggestions[existingIndex].usageCount + 1,
+                    lastUsed: new Date().toISOString(),
+                };
+            } else {
+                // Create new suggestion
+                const newSuggestion: TaskSuggestion = {
+                    id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                    title: task.title,
+                    description: task.description,
+                    hour,
+                    minute,
+                    usageCount: 1,
+                    lastUsed: new Date().toISOString(),
+                    createdAt: new Date().toISOString(),
+                };
+                suggestions.push(newSuggestion);
+            }
+
+            await this.saveTaskSuggestions(suggestions);
+        } catch (error) {
+            console.error('Error adding task suggestion:', error);
+            throw new Error('Failed to add task suggestion');
+        }
+    }
+
+    /**
+     * Update suggestion usage count
+     */
+    static async updateSuggestionUsage(suggestionId: string): Promise<void> {
+        try {
+            const suggestions = await this.loadTaskSuggestions();
+            const suggestionIndex = suggestions.findIndex(s => s.id === suggestionId);
+
+            if (suggestionIndex !== -1) {
+                suggestions[suggestionIndex] = {
+                    ...suggestions[suggestionIndex],
+                    usageCount: suggestions[suggestionIndex].usageCount + 1,
+                    lastUsed: new Date().toISOString(),
+                };
+                await this.saveTaskSuggestions(suggestions);
+            }
+        } catch (error) {
+            console.error('Error updating suggestion usage:', error);
+            throw new Error('Failed to update suggestion usage');
         }
     }
 }

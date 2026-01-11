@@ -14,10 +14,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { Task, TaskFormData } from '@/types';
+import { Task, TaskFormData, TaskSuggestion, TaskCategory, TaskPriority, RecurrenceType } from '@/types';
 import { Colors } from '@/constants/theme';
 import { CustomCalendarPicker } from './custom-calendar-picker';
 import { CustomTimePicker } from './custom-time-picker';
+import { TaskSuggestions } from './task-suggestions';
+import { CategorySelector } from './category-selector';
+import { PrioritySelector } from './priority-selector';
+import { RecurrenceSelector } from './recurrence-selector';
+import { StorageService } from '@/services/storage-service';
 
 interface AddTaskModalProps {
     visible: boolean;
@@ -41,6 +46,10 @@ export function AddTaskModal({
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showTimePicker, setShowTimePicker] = useState(false);
     const [errors, setErrors] = useState<{ title?: string; dateTime?: string }>({});
+    const [suggestions, setSuggestions] = useState<TaskSuggestion[]>([]);
+    const [selectedCategory, setSelectedCategory] = useState<TaskCategory>('other');
+    const [selectedPriority, setSelectedPriority] = useState<TaskPriority>('low');
+    const [selectedRecurrence, setSelectedRecurrence] = useState<RecurrenceType>('none');
 
     useEffect(() => {
         if (visible) {
@@ -51,6 +60,9 @@ export function AddTaskModal({
                 const taskDate = new Date(task.dateTime);
                 setSelectedDate(taskDate);
                 setSelectedTime(taskDate);
+                setSelectedCategory(task.category || 'other');
+                setSelectedPriority(task.priority || 'low');
+                setSelectedRecurrence(task.recurrence || 'none');
             } else if (prefilledDate) {
                 // Prefilled date from calendar
                 setSelectedDate(prefilledDate);
@@ -60,8 +72,21 @@ export function AddTaskModal({
                 resetForm();
             }
             setErrors({});
+            loadSuggestions();
         }
     }, [visible, task, prefilledDate]);
+
+    const loadSuggestions = async () => {
+        try {
+            console.log('Loading suggestions...');
+            const loadedSuggestions = await StorageService.loadTaskSuggestions();
+            console.log('Loaded suggestions from storage:', loadedSuggestions);
+            console.log('Number of loaded suggestions:', loadedSuggestions.length);
+            setSuggestions(loadedSuggestions);
+        } catch (error) {
+            console.error('Error loading suggestions:', error);
+        }
+    };
 
     const resetForm = () => {
         setTitle('');
@@ -71,6 +96,9 @@ export function AddTaskModal({
         tomorrow.setHours(9, 0, 0, 0);
         setSelectedDate(tomorrow);
         setSelectedTime(tomorrow);
+        setSelectedCategory('other');
+        setSelectedPriority('low');
+        setSelectedRecurrence('none');
     };
 
     const validateForm = (): boolean => {
@@ -105,6 +133,9 @@ export function AddTaskModal({
             description: description.trim() || undefined,
             date: selectedDate,
             time: selectedTime,
+            category: selectedCategory,
+            priority: selectedPriority,
+            recurrence: selectedRecurrence,
         });
 
         resetForm();
@@ -156,6 +187,39 @@ export function AddTaskModal({
             minute: '2-digit',
             hour12: true,
         });
+    };
+
+    const handleSelectSuggestion = async (suggestion: TaskSuggestion) => {
+        // Populate form with suggestion data
+        setTitle(suggestion.title);
+        setDescription(suggestion.description || '');
+
+        // Set the time based on suggestion
+        const newTime = new Date();
+        newTime.setHours(suggestion.hour);
+        newTime.setMinutes(suggestion.minute);
+        setSelectedTime(newTime);
+
+        // Update suggestion usage count
+        await StorageService.updateSuggestionUsage(suggestion.id);
+
+        // Reload suggestions to reflect updated usage
+        loadSuggestions();
+    };
+
+    const handleCategorySelect = (category: TaskCategory) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setSelectedCategory(category);
+    };
+
+    const handlePrioritySelect = (priority: TaskPriority) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setSelectedPriority(priority);
+    };
+
+    const handleRecurrenceSelect = (recurrence: RecurrenceType) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setSelectedRecurrence(recurrence);
     };
 
     return (
@@ -211,6 +275,24 @@ export function AddTaskModal({
                                     textAlignVertical="top"
                                 />
                             </View>
+
+                            {/* Category Selector */}
+                            <CategorySelector
+                                selectedCategory={selectedCategory}
+                                onSelectCategory={handleCategorySelect}
+                            />
+
+                            {/* Priority Selector */}
+                            <PrioritySelector
+                                selectedPriority={selectedPriority}
+                                onSelectPriority={handlePrioritySelect}
+                            />
+
+                            {/* Recurrence Selector */}
+                            <RecurrenceSelector
+                                selectedRecurrence={selectedRecurrence}
+                                onSelectRecurrence={handleRecurrenceSelect}
+                            />
 
                             {/* Date Picker */}
                             <View style={styles.inputGroup}>
@@ -271,6 +353,14 @@ export function AddTaskModal({
                                 )}
                                 {errors.dateTime && <Text style={styles.errorText}>{errors.dateTime}</Text>}
                             </View>
+
+                            {/* Task Suggestions */}
+                            {!task && (
+                                <TaskSuggestions
+                                    suggestions={suggestions}
+                                    onSelectSuggestion={handleSelectSuggestion}
+                                />
+                            )}
                         </ScrollView>
 
                         {/* Footer Buttons */}

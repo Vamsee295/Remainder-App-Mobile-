@@ -39,14 +39,20 @@ export function TaskList({
     refreshing = false,
 }: TaskListProps) {
     const getFilteredTasks = (): Task[] => {
+        let filtered: Task[];
+
         switch (filter) {
             case 'active':
-                return tasks.filter(task => !task.completed);
+                filtered = tasks.filter(task => !task.completed);
+                break;
             case 'completed':
-                return tasks.filter(task => task.completed);
+                filtered = tasks.filter(task => task.completed);
+                break;
             default:
-                return tasks;
+                filtered = tasks;
         }
+
+        return filtered;
     };
 
     const getSortedTasks = (tasksToSort: Task[]): Task[] => {

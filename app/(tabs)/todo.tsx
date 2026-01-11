@@ -7,6 +7,7 @@ import {
     StatusBar,
     FlatList,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { TodoItem } from '@/types';
 import { StorageService } from '@/services/storage-service';
 import { TodoItemCard } from '@/components/todo-item-card';
@@ -36,13 +37,14 @@ export default function TodoScreen() {
         setModalVisible(true);
     };
 
-    const handleSaveTodo = async (todoData: { text: string }) => {
+    const handleSaveTodo = async (todoData: { text: string; deadline?: Date }) => {
         try {
             const newTodo: TodoItem = {
                 id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
                 text: todoData.text,
                 completed: false,
                 createdAt: new Date().toISOString(),
+                deadline: todoData.deadline?.toISOString(),
             };
 
             await StorageService.addTodo(newTodo);
@@ -92,11 +94,14 @@ export default function TodoScreen() {
             <View style={styles.container}>
                 {/* Header */}
                 <View style={styles.header}>
-                    <View>
-                        <Text style={styles.headerTitle}>To-Do List</Text>
-                        <Text style={styles.headerSubtitle}>
-                            {activeTodos.length} active • {completedTodos.length} completed
-                        </Text>
+                    <View style={styles.headerContent}>
+                        <Ionicons name="checkmark-done-circle" size={32} color={Colors.primary} />
+                        <View style={styles.headerText}>
+                            <Text style={styles.headerTitle}>To-Do List</Text>
+                            <Text style={styles.headerSubtitle}>
+                                {activeTodos.length} active • {completedTodos.length} completed
+                            </Text>
+                        </View>
                     </View>
                 </View>
 
@@ -153,6 +158,14 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingTop: 48,
         paddingBottom: 12,
+    },
+    headerContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    headerText: {
+        flex: 1,
     },
     headerTitle: {
         fontSize: 32,

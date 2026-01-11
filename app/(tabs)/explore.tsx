@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Task, TaskFormData } from '@/types';
 import { StorageService } from '@/services/storage-service';
 import { NotificationService } from '@/services/notification-service';
+import { RecurrenceService } from '@/services/recurrence-service';
 import { CalendarView } from '@/components/calendar-view';
 import { TaskCard } from '@/components/task-card';
 import { AddTaskModal } from '@/components/add-task-modal';
@@ -87,6 +88,10 @@ export default function CalendarScreen() {
         dateTime: combinedDateTime.toISOString(),
         completed: false,
         createdAt: new Date().toISOString(),
+        category: taskData.category,
+        priority: taskData.priority,
+        recurrence: taskData.recurrence,
+        recurrenceInterval: taskData.recurrenceInterval,
       };
 
       const notificationIds = await NotificationService.scheduleNotification(newTask);
@@ -95,6 +100,12 @@ export default function CalendarScreen() {
       }
 
       await StorageService.addTask(newTask);
+
+      // Save task as a suggestion for future use
+      console.log('Saving task as suggestion:', newTask);
+      await StorageService.addTaskSuggestion(newTask);
+      console.log('Task suggestion saved successfully');
+
       setTasks(prevTasks => [...prevTasks, newTask]);
       setModalVisible(false);
     } catch (error) {
@@ -125,6 +136,19 @@ export default function CalendarScreen() {
       setTasks(prevTasks =>
         prevTasks.map(t => (t.id === taskId ? updatedTask : t))
       );
+
+      // If marking as complete and task is recurring, create next occurrence
+      if (updatedTask.completed && RecurrenceService.isRecurringTask(task)) {
+        const nextTask = RecurrenceService.createNextOccurrence(task);
+        if (nextTask) {
+          const notificationIds = await NotificationService.scheduleNotification(nextTask);
+          if (notificationIds) {
+            nextTask.notificationIds = notificationIds;
+          }
+          await StorageService.addTask(nextTask);
+          setTasks(prevTasks => [...prevTasks, nextTask]);
+        }
+      }
     } catch (error) {
       console.error('Error toggling task completion:', error);
     }
@@ -192,7 +216,12 @@ export default function CalendarScreen() {
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Calendar</Text>
+          <View style={styles.headerContent}>
+            <Ionicons name="calendar" size={32} color={Colors.primary} />
+            <View style={styles.headerText}>
+              <Text style={styles.headerTitle}>Calendar</Text>
+            </View>
+          </View>
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false}>
@@ -262,8 +291,18 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingTop: 48, // Increased from 16 to avoid status bar overlap
+    paddingTop: 48,
     paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerText: {
+    flex: 1,
   },
   headerTitle: {
     fontSize: 32,

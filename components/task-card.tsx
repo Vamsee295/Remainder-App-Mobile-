@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Task } from '@/types';
 import { Colors } from '@/constants/theme';
+import { getCategoryConfig, getPriorityConfig } from '@/constants/categories';
 
 interface TaskCardProps {
     task: Task;
@@ -162,6 +163,32 @@ export function TaskCard({ task, onToggleComplete, onDelete, onEdit, onSnooze }:
                                 {formatDateTime(task.dateTime)}
                             </Text>
                         </View>
+
+                        {/* Category and Priority Badges */}
+                        <View style={styles.badgesContainer}>
+                            {task.category && (
+                                <View style={[styles.categoryBadge, { backgroundColor: getCategoryConfig(task.category).color + '20', borderColor: getCategoryConfig(task.category).color }]}>
+                                    <Ionicons
+                                        name={getCategoryConfig(task.category).icon as any}
+                                        size={10}
+                                        color={getCategoryConfig(task.category).color}
+                                    />
+                                    <Text style={[styles.badgeText, { color: getCategoryConfig(task.category).color }]}>
+                                        {getCategoryConfig(task.category).label}
+                                    </Text>
+                                </View>
+                            )}
+                            {task.priority && (
+                                <View style={[styles.priorityBadge, { borderColor: getPriorityConfig(task.priority).color }]}>
+                                    <View style={[styles.priorityDot, { backgroundColor: getPriorityConfig(task.priority).color }]} />
+                                </View>
+                            )}
+                            {task.recurrence && task.recurrence !== 'none' && (
+                                <View style={styles.recurrenceBadge}>
+                                    <Ionicons name="repeat" size={10} color={Colors.primary} />
+                                </View>
+                            )}
+                        </View>
                     </View>
 
                     <View style={styles.actionsContainer}>
@@ -300,5 +327,38 @@ const styles = StyleSheet.create({
     deleteButton: { // Deprecated but leaving for now if referenced elsewhere, though removing usage
         padding: 8,
         marginLeft: 8,
+    },
+    badgesContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginTop: 6,
+    },
+    categoryBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 12,
+        borderWidth: 1,
+    },
+    badgeText: {
+        fontSize: 10,
+        fontWeight: '600',
+    },
+    priorityBadge: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        borderWidth: 1.5,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: Colors.surface,
+    },
+    priorityDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
     },
 });
