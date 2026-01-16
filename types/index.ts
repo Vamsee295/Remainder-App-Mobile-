@@ -22,6 +22,9 @@ export interface Task {
   recurrenceInterval?: number; // e.g., every 2 days, every 3 weeks
   recurrenceParentId?: string; // Links to original recurring task
   subTasks?: SubTask[]; // Array of sub-tasks/checklist items
+  deadlineDate?: string | null; // null for Daily mode, ISO date for Weekly/Monthly
+  isExpired?: boolean; // Track if alarm deadline has passed
+  alarmSnoozedCount?: number; // Track how many times alarm was snoozed
 }
 
 export interface TaskFormData {
@@ -33,6 +36,7 @@ export interface TaskFormData {
   priority?: TaskPriority;
   recurrence?: RecurrenceType;
   recurrenceInterval?: number;
+  enableAlarm?: boolean; // Toggle to enable/disable alarm functionality
 }
 
 export type TaskFilter = 'active' | 'completed' | 'all';
@@ -65,3 +69,99 @@ export interface TaskSuggestion {
   lastUsed: string; // ISO timestamp
   createdAt: string; // ISO timestamp
 }
+
+export interface SnoozeOption {
+  label: string;
+  minutes: number;
+}
+
+export const SNOOZE_OPTIONS: SnoozeOption[] = [
+  { label: '5 minutes', minutes: 5 },
+  { label: '10 minutes', minutes: 10 },
+  { label: '15 minutes', minutes: 15 },
+  { label: '30 minutes', minutes: 30 },
+];
+
+export interface AlarmSound {
+  id: string;
+  name: string;
+  description: string;
+  soundFile?: any; // For custom sounds - require() reference
+  isDefault: boolean;
+  isCustom: boolean;
+}
+
+// Default alarm sounds (uses system notification sound)
+export const DEFAULT_ALARM_SOUNDS: AlarmSound[] = [
+  {
+    id: 'default',
+    name: 'Default Notification',
+    description: 'System notification sound',
+    isDefault: true,
+    isCustom: false,
+  },
+  {
+    id: 'classic_alarm',
+    name: 'Classic Alarm',
+    description: 'Traditional alarm beep',
+    isDefault: true,
+    isCustom: false,
+  },
+  {
+    id: 'gentle_wake',
+    name: 'Gentle Wake',
+    description: 'Soft rising tone',
+    isDefault: true,
+    isCustom: false,
+  },
+  {
+    id: 'urgent_beep',
+    name: 'Urgent Beep',
+    description: 'Fast beeping sound',
+    isDefault: true,
+    isCustom: false,
+  },
+  {
+    id: 'morning_chime',
+    name: 'Morning Chime',
+    description: 'Pleasant chime melody',
+    isDefault: true,
+    isCustom: false,
+  },
+  {
+    id: 'custom_1',
+    name: 'Custom Sound 1',
+    description: 'Add your own: custom_alarm_1.mp3',
+    isDefault: false,
+    isCustom: true,
+  },
+  {
+    id: 'custom_2',
+    name: 'Custom Sound 2',
+    description: 'Add your own: custom_alarm_2.mp3',
+    isDefault: false,
+    isCustom: true,
+  },
+  {
+    id: 'custom_3',
+    name: 'Custom Sound 3',
+    description: 'Add your own: custom_alarm_3.mp3',
+    isDefault: false,
+    isCustom: true,
+  },
+  {
+    id: 'custom_4',
+    name: 'Custom Sound 4',
+    description: 'Add your own: custom_alarm_4.mp3',
+    isDefault: false,
+    isCustom: true,
+  },
+  {
+    id: 'custom_5',
+    name: 'Custom Sound 5',
+    description: 'Add your own: custom_alarm_5.mp3',
+    isDefault: false,
+    isCustom: true,
+  },
+];
+

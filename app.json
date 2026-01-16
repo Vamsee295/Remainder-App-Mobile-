@@ -26,7 +26,12 @@
         "SCHEDULE_EXACT_ALARM",
         "USE_EXACT_ALARM",
         "POST_NOTIFICATIONS",
-        "VIBRATE"
+        "VIBRATE",
+        "WAKE_LOCK",
+        "USE_FULL_SCREEN_INTENT",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "READ_MEDIA_AUDIO"
       ],
       "useNextNotificationsApi": true
     },

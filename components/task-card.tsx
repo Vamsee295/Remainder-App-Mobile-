@@ -11,6 +11,7 @@ import * as Haptics from 'expo-haptics';
 import { Task } from '@/types';
 import { Colors } from '@/constants/theme';
 import { getCategoryConfig, getPriorityConfig } from '@/constants/categories';
+import { AlarmService } from '@/services/alarm-service';
 
 interface TaskCardProps {
     task: Task;
@@ -188,7 +189,36 @@ export function TaskCard({ task, onToggleComplete, onDelete, onEdit, onSnooze }:
                                     <Ionicons name="repeat" size={10} color={Colors.primary} />
                                 </View>
                             )}
+                            {/* Alarm indicator */}
+                            {AlarmService.hasAlarm(task) && (
+                                <View style={styles.alarmBadge}>
+                                    <Ionicons name="alarm" size={10} color={Colors.warning} />
+                                </View>
+                            )}
+                            {/* Expired badge */}
+                            {task.isExpired && (
+                                <View style={styles.expiredBadge}>
+                                    <Text style={styles.expiredText}>EXPIRED</Text>
+                                </View>
+                            )}
+                            {/* Snooze count */}
+                            {task.alarmSnoozedCount && task.alarmSnoozedCount > 0 && (
+                                <View style={styles.snoozeBadge}>
+                                    <Ionicons name="moon" size={8} color={Colors.info} />
+                                    <Text style={styles.snoozeText}>x{task.alarmSnoozedCount}</Text>
+                                </View>
+                            )}
                         </View>
+
+                        {/* Deadline info for Weekly/Monthly */}
+                        {task.deadlineDate && !task.isExpired && (
+                            <View style={styles.deadlineContainer}>
+                                <Ionicons name="hourglass-outline" size={10} color={Colors.info} />
+                                <Text style={styles.deadlineText}>
+                                    {AlarmService.formatDeadlineInfo(task)}
+                                </Text>
+                            </View>
+                        )}
                     </View>
 
                     <View style={styles.actionsContainer}>
@@ -360,5 +390,64 @@ const styles = StyleSheet.create({
         width: 10,
         height: 10,
         borderRadius: 5,
+    },
+    recurrenceBadge: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: Colors.primary,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: Colors.primary + '20',
+    },
+    alarmBadge: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: Colors.warning,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: Colors.warning + '20',
+    },
+    expiredBadge: {
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 8,
+        backgroundColor: Colors.error,
+    },
+    expiredText: {
+        fontSize: 8,
+        fontWeight: '700',
+        color: '#FFFFFF',
+        letterSpacing: 0.5,
+    },
+    snoozeBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 2,
+        paddingHorizontal: 5,
+        paddingVertical: 2,
+        borderRadius: 8,
+        backgroundColor: Colors.info + '20',
+        borderWidth: 1,
+        borderColor: Colors.info,
+    },
+    snoozeText: {
+        fontSize: 8,
+        fontWeight: '600',
+        color: Colors.info,
+    },
+    deadlineContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        marginTop: 4,
+    },
+    deadlineText: {
+        fontSize: 10,
+        color: Colors.info,
+        fontWeight: '500',
     },
 });

@@ -8,10 +8,12 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Notifications from 'expo-notifications';
 import { Task, TaskFilter, TaskFormData, TaskCategory, TaskPriority } from '@/types';
 import { StorageService } from '@/services/storage-service';
 import { NotificationService } from '@/services/notification-service';
 import { RecurrenceService } from '@/services/recurrence-service';
+import { AlarmService } from '@/services/alarm-service';
 import { TaskList } from '@/components/task-list';
 import { AddTaskModal } from '@/components/add-task-modal';
 import { FloatingActionButton } from '@/components/floating-action-button';
@@ -33,6 +35,34 @@ export default function TasksScreen() {
     loadTasks();
     requestNotificationPermissions();
     setupNotificationListeners();
+  }, []);
+
+  // Periodic check for expired alarms (every 5 minutes)
+  useEffect(() => {
+    const checkExpiredAlarms = async () => {
+      try {
+        const currentTasks = await StorageService.loadTasks();
+        const expiredTasks = AlarmService.getExpiredTasks(currentTasks);
+
+        if (expiredTasks.length > 0) {
+          const expiredIds = expiredTasks.map(t => t.id);
+          await StorageService.updateExpiredTasks(expiredIds);
+          // Reload tasks to reflect changes
+          await loadTasks();
+          console.log(`Marked ${expiredTasks.length} task(s) as expired`);
+        }
+      } catch (error) {
+        console.error('Error checking expired alarms:', error);
+      }
+    };
+
+    // Check immediately on mount
+    checkExpiredAlarms();
+
+    // Check every 5 minutes
+    const interval = setInterval(checkExpiredAlarms, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const requestNotificationPermissions = async () => {
@@ -106,6 +136,12 @@ export default function TasksScreen() {
 
       if (editingTask) {
         // Update existing task
+        // Calculate deadline based on recurrence type
+        const deadlineDate = AlarmService.calculateDeadlineDate(
+          editingTask.createdAt,
+          taskData.recurrence
+        );
+
         const updatedTask: Task = {
           ...editingTask,
           title: taskData.title,
@@ -115,6 +151,9 @@ export default function TasksScreen() {
           priority: taskData.priority,
           recurrence: taskData.recurrence,
           recurrenceInterval: taskData.recurrenceInterval,
+          deadlineDate: deadlineDate,
+          isExpired: false, // Reset expired status when editing
+          alarmSnoozedCount: 0, // Reset snooze count when editing
         };
 
         // Cancel old notifications
@@ -134,17 +173,28 @@ export default function TasksScreen() {
         );
       } else {
         // Create new task
+        const createdAt = new Date().toISOString();
+
+        // Calculate deadline based on recurrence type
+        const deadlineDate = AlarmService.calculateDeadlineDate(
+          createdAt,
+          taskData.recurrence
+        );
+
         const newTask: Task = {
           id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
           title: taskData.title,
           description: taskData.description,
           dateTime: combinedDateTime.toISOString(),
           completed: false,
-          createdAt: new Date().toISOString(),
+          createdAt: createdAt,
           category: taskData.category,
           priority: taskData.priority,
           recurrence: taskData.recurrence,
           recurrenceInterval: taskData.recurrenceInterval,
+          deadlineDate: deadlineDate,
+          isExpired: false,
+          alarmSnoozedCount: 0,
         };
 
         // Schedule notifications (3 total)
@@ -234,17 +284,18 @@ export default function TasksScreen() {
     }
   };
 
-  const handleSnoozeTask = async (taskId: string) => {
+  const handleSnoozeTask = async (taskId: string, snoozeMinutes: number = 5) => {
     try {
       const task = tasks.find(t => t.id === taskId);
       if (!task) return;
 
       const now = new Date();
-      const snoozeTime = new Date(now.getTime() + 5 * 60000); // 5 minutes from now
+      const snoozeTime = new Date(now.getTime() + snoozeMinutes * 60000);
 
       const updatedTask: Task = {
         ...task,
         dateTime: snoozeTime.toISOString(),
+        alarmSnoozedCount: (task.alarmSnoozedCount || 0) + 1,
       };
 
       // Cancel old notifications
@@ -262,8 +313,38 @@ export default function TasksScreen() {
       setTasks(prevTasks =>
         prevTasks.map(t => (t.id === taskId ? updatedTask : t))
       );
+
+      console.log(`Task snoozed for ${snoozeMinutes} minutes (snooze count: ${updatedTask.alarmSnoozedCount})`);
     } catch (error) {
       console.error('Error snoozing task:', error);
+    }
+  };
+
+  const handleTestAlarm = async () => {
+    try {
+      const hasPermission = await NotificationService.requestPermissions();
+
+      if (!hasPermission) {
+        alert('Please enable notification permissions to test alarms');
+        return;
+      }
+
+      // Trigger an immediate notification
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '🔔 Test Alarm',
+          body: 'This is your test alarm! If you hear sound, notifications are working.',
+          sound: true,
+          priority: Notifications.AndroidNotificationPriority.MAX,
+          vibrate: [0, 250, 250, 250],
+        },
+        trigger: null, // null trigger = immediate notification
+      });
+
+      console.log('Test alarm notification sent!');
+    } catch (error) {
+      console.error('Error testing alarm:', error);
+      alert('Error sending test notification: ' + error);
     }
   };
 
@@ -326,6 +407,15 @@ export default function TasksScreen() {
             />
           </View>
         </View>
+
+        {/* Test Alarm Button */}
+        <TouchableOpacity
+          style={styles.testAlarmButton}
+          onPress={handleTestAlarm}
+        >
+          <Ionicons name="notifications" size={20} color="#FFFFFF" />
+          <Text style={styles.testAlarmButtonText}>Test Alarm Sound 🔔</Text>
+        </TouchableOpacity>
 
         {/* Filter Tabs */}
         <View style={styles.filterContainer}>
@@ -448,6 +538,28 @@ const styles = StyleSheet.create({
   },
   filterTextActive: {
     color: Colors.background,
+  },
+  testAlarmButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FF6B6B',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+    shadowColor: '#FF6B6B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  testAlarmButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });
 

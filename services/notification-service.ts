@@ -1,6 +1,10 @@
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import { Platform, NativeModules } from 'react-native';
 import { Task } from '@/types';
+import { AlarmService } from './alarm-service';
+
+// Get native alarm module (Android only)
+const { AlarmModule } = NativeModules;
 
 // Configure how notifications should be handled when app is in foreground
 Notifications.setNotificationHandler({
@@ -58,6 +62,7 @@ export class NotificationService {
     /**
      * Schedule a notification for a task (with auto-snooze)
      * Schedules 3 notifications: main + 2 auto-snoozes (5 and 10 mins later)
+     * Also validates alarm deadlines before scheduling
      */
     static async scheduleNotification(task: Task): Promise<string[] | null> {
         try {
@@ -65,6 +70,12 @@ export class NotificationService {
 
             if (!hasPermission) {
                 console.warn('Cannot schedule notification without permissions');
+                return null;
+            }
+
+            // Check if alarm is valid (not expired)
+            if (!AlarmService.isAlarmValid(task)) {
+                console.warn('Task alarm has expired, skipping notification');
                 return null;
             }
 
@@ -77,16 +88,54 @@ export class NotificationService {
                 return null;
             }
 
+            // **USE NATIVE ALARM MODULE ON ANDROID**
+            if (Platform.OS === 'android' && AlarmModule) {
+                try {
+                    console.log('Using native AlarmModule for Android');
+
+                    // Get custom sound URI from storage if available
+                    const { StorageService } = require('./storage-service');
+                    const soundUri = await StorageService.loadSelectedAlarmSound();
+
+                    // Schedule native alarm
+                    await AlarmModule.setAlarm(
+                        task.id,
+                        taskDate.getTime(),
+                        soundUri && soundUri.startsWith('content://') ? soundUri : 'default',
+                        task.title,
+                        task.description || 'Your reminder is due'
+                    );
+
+                    console.log(`Native alarm scheduled for: ${taskDate.toLocaleString()}`);
+                    return [task.id]; // Return task ID as alarm ID
+                } catch (error) {
+                    console.error('Error using native alarm, falling back to notifications:', error);
+                    // Fall through to use expo-notifications as backup
+                }
+            }
+
+            // **FALLBACK: Use expo-notifications (iOS, web, or if native fails)**
             const notificationIds: string[] = [];
+
+            // Build notification body with deadline info if applicable
+            let notificationBody = task.description || 'Your reminder is due';
+            const deadlineInfo = AlarmService.formatDeadlineInfo(task);
+            if (deadlineInfo && task.recurrence !== 'daily') {
+                notificationBody += ` • ${deadlineInfo}`;
+            }
 
             // Schedule main notification
             const mainId = await Notifications.scheduleNotificationAsync({
                 content: {
-                    title: task.title,
-                    body: task.description || 'Your reminder is due',
-                    data: { taskId: task.id },
+                    title: `🔔 ${task.title}`,
+                    body: notificationBody,
+                    data: {
+                        taskId: task.id,
+                        isAlarm: true,
+                        hasDeadline: Boolean(task.deadlineDate),
+                    },
                     sound: true,
-                    priority: Notifications.AndroidNotificationPriority.HIGH,
+                    priority: Notifications.AndroidNotificationPriority.MAX,
                 },
                 trigger: {
                     type: Notifications.SchedulableTriggerInputTypes.DATE,

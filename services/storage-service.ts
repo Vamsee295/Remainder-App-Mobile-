@@ -4,6 +4,7 @@ import { Task, TodoItem, TaskSuggestion } from '@/types';
 const TASKS_STORAGE_KEY = '@remainder_tasks';
 const TODOS_STORAGE_KEY = '@remainder_todos';
 const SUGGESTIONS_STORAGE_KEY = '@remainder_task_suggestions';
+const ALARM_SOUND_STORAGE_KEY = '@remainder_selected_alarm_sound';
 
 export class StorageService {
     /**
@@ -95,6 +96,65 @@ export class StorageService {
         } catch (error) {
             console.error('Error clearing tasks:', error);
             throw new Error('Failed to clear tasks');
+        }
+    }
+
+    /**
+     * Get all active (non-expired, non-completed) alarms
+     */
+    static async getActiveAlarms(): Promise<Task[]> {
+        try {
+            const tasks = await this.loadTasks();
+            const now = new Date();
+
+            return tasks.filter(task => {
+                // Filter out completed tasks
+                if (task.completed) {
+                    return false;
+                }
+
+                // Filter out expired tasks
+                if (task.isExpired) {
+                    return false;
+                }
+
+                // Filter out tasks without recurrence (no alarm)
+                if (!task.recurrence || task.recurrence === 'none') {
+                    return false;
+                }
+
+                // Check deadline validity
+                if (task.deadlineDate) {
+                    const deadline = new Date(task.deadlineDate);
+                    if (now > deadline) {
+                        return false;
+                    }
+                }
+
+                return true;
+            });
+        } catch (error) {
+            console.error('Error getting active alarms:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Batch update multiple tasks as expired
+     */
+    static async updateExpiredTasks(taskIds: string[]): Promise<void> {
+        try {
+            const tasks = await this.loadTasks();
+            const updatedTasks = tasks.map(task => {
+                if (taskIds.includes(task.id)) {
+                    return { ...task, isExpired: true };
+                }
+                return task;
+            });
+            await this.saveTasks(updatedTasks);
+        } catch (error) {
+            console.error('Error updating expired tasks:', error);
+            throw new Error('Failed to update expired tasks');
         }
     }
 
@@ -280,6 +340,35 @@ export class StorageService {
         } catch (error) {
             console.error('Error updating suggestion usage:', error);
             throw new Error('Failed to update suggestion usage');
+        }
+    }
+
+    // ===== ALARM SOUND SELECTION =====
+
+    /**
+     * Save selected alarm sound ID to AsyncStorage
+     */
+    static async saveSelectedAlarmSound(soundId: string): Promise<void> {
+        try {
+            await AsyncStorage.setItem(ALARM_SOUND_STORAGE_KEY, soundId);
+            console.log(`Saved alarm sound: ${soundId}`);
+        } catch (error) {
+            console.error('Error saving alarm sound:', error);
+            throw new Error('Failed to save alarm sound');
+        }
+    }
+
+    /**
+     * Load selected alarm sound ID from AsyncStorage
+     * Returns 'default' if no sound is saved
+     */
+    static async loadSelectedAlarmSound(): Promise<string> {
+        try {
+            const soundId = await AsyncStorage.getItem(ALARM_SOUND_STORAGE_KEY);
+            return soundId || 'default'; // Default to 'default' sound
+        } catch (error) {
+            console.error('Error loading alarm sound:', error);
+            return 'default';
         }
     }
 }

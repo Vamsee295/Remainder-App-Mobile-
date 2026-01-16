@@ -1,4 +1,5 @@
 import { Task, RecurrenceType } from '@/types';
+import { AlarmService } from './alarm-service';
 
 export class RecurrenceService {
     /**
@@ -29,11 +30,27 @@ export class RecurrenceService {
 
     /**
      * Create the next occurrence of a recurring task
+     * Respects alarm deadlines - won't create new occurrence if deadline passed
      */
     static createNextOccurrence(completedTask: Task): Task | null {
+        // Don't create next occurrence if the task deadline has passed
+        if (!AlarmService.isAlarmValid(completedTask)) {
+            console.log('Task deadline passed, not creating next occurrence');
+            return null;
+        }
+
         const nextDate = this.getNextOccurrence(completedTask);
         if (!nextDate) {
             return null;
+        }
+
+        // If next occurrence would be beyond deadline, don't create it
+        if (completedTask.deadlineDate) {
+            const deadline = new Date(completedTask.deadlineDate);
+            if (nextDate > deadline) {
+                console.log('Next occurrence would exceed deadline, not creating');
+                return null;
+            }
         }
 
         const newTask: Task = {
@@ -48,6 +65,10 @@ export class RecurrenceService {
             recurrence: completedTask.recurrence,
             recurrenceInterval: completedTask.recurrenceInterval,
             recurrenceParentId: completedTask.recurrenceParentId || completedTask.id,
+            // Inherit deadline from parent task
+            deadlineDate: completedTask.deadlineDate,
+            isExpired: false,
+            alarmSnoozedCount: 0,
         };
 
         return newTask;

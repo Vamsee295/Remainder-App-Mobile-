@@ -14,7 +14,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { Task, TaskFormData, TaskSuggestion, TaskCategory, TaskPriority, RecurrenceType } from '@/types';
+import * as Notifications from 'expo-notifications';
+import { Task, TaskFormData, TaskSuggestion, TaskCategory, TaskPriority, RecurrenceType, DEFAULT_ALARM_SOUNDS } from '@/types';
 import { Colors } from '@/constants/theme';
 import { CustomCalendarPicker } from './custom-calendar-picker';
 import { CustomTimePicker } from './custom-time-picker';
@@ -23,6 +24,9 @@ import { CategorySelector } from './category-selector';
 import { PrioritySelector } from './priority-selector';
 import { RecurrenceSelector } from './recurrence-selector';
 import { StorageService } from '@/services/storage-service';
+import { AlarmService } from '@/services/alarm-service';
+import * as MediaLibrary from 'expo-media-library';
+import * as DocumentPicker from 'expo-document-picker';
 
 interface AddTaskModalProps {
     visible: boolean;
@@ -50,6 +54,9 @@ export function AddTaskModal({
     const [selectedCategory, setSelectedCategory] = useState<TaskCategory>('other');
     const [selectedPriority, setSelectedPriority] = useState<TaskPriority>('low');
     const [selectedRecurrence, setSelectedRecurrence] = useState<RecurrenceType>('none');
+    const [enableAlarm, setEnableAlarm] = useState(true); // Alarm enabled by default
+    const [selectedAlarmSound, setSelectedAlarmSound] = useState('default'); // Selected alarm sound ID
+    const [showSoundPicker, setShowSoundPicker] = useState(false); // Sound picker modal
 
     useEffect(() => {
         if (visible) {
@@ -73,8 +80,18 @@ export function AddTaskModal({
             }
             setErrors({});
             loadSuggestions();
+            loadSavedAlarmSound(); // Load saved alarm sound preference
         }
     }, [visible, task, prefilledDate]);
+
+    const loadSavedAlarmSound = async () => {
+        try {
+            const savedSound = await StorageService.loadSelectedAlarmSound();
+            setSelectedAlarmSound(savedSound);
+        } catch (error) {
+            console.error('Error loading alarm sound:', error);
+        }
+    };
 
     const loadSuggestions = async () => {
         try {
@@ -99,6 +116,7 @@ export function AddTaskModal({
         setSelectedCategory('other');
         setSelectedPriority('low');
         setSelectedRecurrence('none');
+        setEnableAlarm(true); // Reset alarm toggle
     };
 
     const validateForm = (): boolean => {
@@ -135,7 +153,8 @@ export function AddTaskModal({
             time: selectedTime,
             category: selectedCategory,
             priority: selectedPriority,
-            recurrence: selectedRecurrence,
+            recurrence: enableAlarm ? selectedRecurrence : 'none', // Only set recurrence if alarm is enabled
+            enableAlarm: enableAlarm,
         });
 
         resetForm();
@@ -288,11 +307,200 @@ export function AddTaskModal({
                                 onSelectPriority={handlePrioritySelect}
                             />
 
-                            {/* Recurrence Selector */}
-                            <RecurrenceSelector
-                                selectedRecurrence={selectedRecurrence}
-                                onSelectRecurrence={handleRecurrenceSelect}
-                            />
+                            {/* Alarm Toggle */}
+                            <View style={styles.inputGroup}>
+                                <View style={styles.alarmToggleContainer}>
+                                    <View style={styles.alarmToggleLabel}>
+                                        <Ionicons name="alarm" size={20} color={enableAlarm ? Colors.warning : Colors.textSecondary} />
+                                        <Text style={styles.label}>Enable Alarm 🔔</Text>
+                                    </View>
+                                    <TouchableOpacity
+                                        style={[styles.toggleSwitch, enableAlarm && styles.toggleSwitchActive]}
+                                        onPress={() => {
+                                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                            setEnableAlarm(!enableAlarm);
+                                        }}
+                                    >
+                                        <View style={[styles.toggleThumb, enableAlarm && styles.toggleThumbActive]} />
+                                    </TouchableOpacity>
+                                </View>
+                                <Text style={styles.helperText}>
+                                    {enableAlarm ? '✓ This task will trigger an alarm notification' : '○ This task will be a regular reminder (no alarm)'}
+                                </Text>
+                            </View>
+
+                            {/* Alarm Sound Selector - Only show if alarm is enabled */}
+                            {enableAlarm && (
+                                <View style={styles.inputGroup}>
+                                    <Text style={styles.label}>Alarm Sound 🎵</Text>
+                                    <TouchableOpacity
+                                        style={styles.soundPickerButton}
+                                        onPress={() => {
+                                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                            setShowSoundPicker(!showSoundPicker);
+                                        }}
+                                    >
+                                        <Ionicons name="musical-notes" size={20} color={Colors.primary} />
+                                        <Text style={styles.soundPickerButtonText}>
+                                            {DEFAULT_ALARM_SOUNDS.find(s => s.id === selectedAlarmSound)?.name || 'Select Sound'}
+                                        </Text>
+                                        <Ionicons name={showSoundPicker ? "chevron-up" : "chevron-down"} size={20} color={Colors.textSecondary} />
+                                    </TouchableOpacity>
+
+                                    {/* Sound Picker List */}
+                                    {showSoundPicker && (
+                                        <View style={styles.soundPickerList}>
+                                            <ScrollView style={styles.soundScrollView} nestedScrollEnabled>
+                                                {DEFAULT_ALARM_SOUNDS.map((sound) => (
+                                                    <TouchableOpacity
+                                                        key={sound.id}
+                                                        style={[
+                                                            styles.soundOption,
+                                                            selectedAlarmSound === sound.id && styles.soundOptionSelected
+                                                        ]}
+                                                        onPress={() => {
+                                                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                                            setSelectedAlarmSound(sound.id);
+                                                        }}
+                                                    >
+                                                        <View style={styles.soundOptionContent}>
+                                                            <View style={styles.soundOptionLeft}>
+                                                                <Ionicons
+                                                                    name={sound.isCustom ? "document-attach" : "musical-note"}
+                                                                    size={18}
+                                                                    color={selectedAlarmSound === sound.id ? Colors.primary : Colors.textSecondary}
+                                                                />
+                                                                <View style={{ flex: 1 }}>
+                                                                    <Text style={[
+                                                                        styles.soundOptionName,
+                                                                        selectedAlarmSound === sound.id && styles.soundOptionNameSelected
+                                                                    ]}>
+                                                                        {sound.name}
+                                                                    </Text>
+                                                                    <Text style={styles.soundOptionDescription}>
+                                                                        {sound.description}
+                                                                    </Text>
+                                                                </View>
+                                                            </View>
+                                                            <View style={styles.soundOptionRight}>
+                                                                {/* Preview/Play Button */}
+                                                                <TouchableOpacity
+                                                                    style={styles.playButton}
+                                                                    onPress={async (e) => {
+                                                                        e.stopPropagation();
+                                                                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                                                        // Trigger a test notification to preview the sound
+                                                                        try {
+                                                                            await Notifications.scheduleNotificationAsync({
+                                                                                content: {
+                                                                                    title: `🔔 Preview: ${sound.name}`,
+                                                                                    body: 'This is how your alarm will sound',
+                                                                                    sound: true,
+                                                                                },
+                                                                                trigger: null,
+                                                                            });
+                                                                        } catch (error) {
+                                                                            console.error('Error playing preview:', error);
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <Ionicons name="play-circle" size={28} color={Colors.primary} />
+                                                                </TouchableOpacity>
+                                                                {selectedAlarmSound === sound.id && (
+                                                                    <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />
+                                                                )}
+                                                            </View>
+                                                        </View>
+                                                    </TouchableOpacity>
+                                                ))}
+                                            </ScrollView>
+
+                                            {/* OK Button to confirm selection */}
+                                            <View style={styles.soundPickerFooter}>
+                                                <TouchableOpacity
+                                                    style={styles.importButton}
+                                                    onPress={async () => {
+                                                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                                        try {
+                                                            // Request media library permissions first
+                                                            const { status } = await MediaLibrary.requestPermissionsAsync();
+
+                                                            if (status !== 'granted') {
+                                                                alert('Permission denied! Please allow access to your media files in Settings.');
+                                                                return;
+                                                            }
+
+                                                            const result = await DocumentPicker.getDocumentAsync({
+                                                                type: 'audio/*',
+                                                                copyToCacheDirectory: false, // Use original URI
+                                                            });
+
+                                                            if (!result.canceled && result.assets && result.assets.length > 0) {
+                                                                const audioFile = result.assets[0];
+                                                                const soundUri = audioFile.uri;
+                                                                const soundName = audioFile.name;
+
+                                                                console.log('Selected audio file:', soundName);
+                                                                console.log('Audio URI:', soundUri);
+
+                                                                // Save the ACTUAL audio URI (content:// path)
+                                                                await StorageService.saveSelectedAlarmSound(soundUri);
+                                                                setSelectedAlarmSound(soundUri);
+
+                                                                // Show success feedback
+                                                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                                                alert(`✅ Imported: ${soundName}\n\nThis sound will be used for your alarms!\n\nURI: ${soundUri}`);
+                                                                setShowSoundPicker(false);
+                                                            }
+                                                        } catch (error) {
+                                                            console.error('Error picking audio file:', error);
+                                                            alert('Failed to import audio file. Please try again.\n\nError: ' + error);
+                                                        }
+                                                    }}
+                                                >
+                                                    <Ionicons name="cloud-upload-outline" size={20} color={Colors.primary} />
+                                                    <Text style={styles.importButtonText}>Import from Storage</Text>
+                                                </TouchableOpacity>
+
+                                                <TouchableOpacity
+                                                    style={styles.soundOkButton}
+                                                    onPress={async () => {
+                                                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                                        await StorageService.saveSelectedAlarmSound(selectedAlarmSound);
+                                                        console.log(`Confirmed alarm sound: ${selectedAlarmSound}`);
+                                                        setShowSoundPicker(false);
+                                                    }}
+                                                >
+                                                    <Text style={styles.soundOkButtonText}>OK - Use This Sound</Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                    )}
+                                </View>
+                            )}
+
+                            {/* Recurrence Selector - Only show if alarm is enabled */}
+                            {enableAlarm && (
+                                <RecurrenceSelector
+                                    selectedRecurrence={selectedRecurrence}
+                                    onSelectRecurrence={handleRecurrenceSelect}
+                                />
+                            )}
+
+                            {/* Deadline Info Display */}
+                            {selectedRecurrence && selectedRecurrence !== 'none' && (
+                                <View style={styles.deadlineInfoBox}>
+                                    <View style={styles.deadlineInfoHeader}>
+                                        <Ionicons name="information-circle" size={18} color={Colors.info} />
+                                        <Text style={styles.deadlineInfoTitle}>Alarm Information</Text>
+                                    </View>
+                                    <Text style={styles.deadlineInfoText}>
+                                        {selectedRecurrence === 'daily' && '• This alarm will ring daily indefinitely until you manually stop it.'}
+                                        {selectedRecurrence === 'weekly' && '• This alarm will ring daily for 7 days from creation, then automatically expire.'}
+                                        {selectedRecurrence === 'monthly' && '• This alarm will ring daily for 30 days from creation, then automatically expire.'}
+                                    </Text>
+                                </View>
+                            )}
 
                             {/* Date Picker */}
                             <View style={styles.inputGroup}>
@@ -540,5 +748,176 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '700',
         color: Colors.text,
+    },
+    deadlineInfoBox: {
+        backgroundColor: Colors.info + '10',
+        borderWidth: 1,
+        borderColor: Colors.info,
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 20,
+    },
+    deadlineInfoHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginBottom: 8,
+    },
+    deadlineInfoTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: Colors.info,
+    },
+    deadlineInfoText: {
+        fontSize: 13,
+        color: Colors.text,
+        lineHeight: 20,
+    },
+    alarmToggleContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    alarmToggleLabel: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    toggleSwitch: {
+        width: 50,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: Colors.surfaceVariant,
+        padding: 2,
+        justifyContent: 'center',
+    },
+    toggleSwitchActive: {
+        backgroundColor: Colors.warning,
+    },
+    toggleThumb: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: '#FFFFFF',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 2,
+        elevation: 2,
+    },
+    toggleThumbActive: {
+        transform: [{ translateX: 22 }],
+    },
+    helperText: {
+        fontSize: 12,
+        color: Colors.textSecondary,
+        fontStyle: 'italic',
+    },
+    soundPickerButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: Colors.inputBackground,
+        borderWidth: 1,
+        borderColor: Colors.inputBorder,
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        gap: 12,
+    },
+    soundPickerButtonText: {
+        flex: 1,
+        fontSize: 16,
+        fontWeight: '600',
+        color: Colors.text,
+    },
+    soundPickerList: {
+        marginTop: 8,
+        backgroundColor: Colors.surface,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: Colors.border,
+        maxHeight: 300,
+        overflow: 'hidden',
+    },
+    soundScrollView: {
+        maxHeight: 300,
+    },
+    soundOption: {
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.divider,
+    },
+    soundOptionSelected: {
+        backgroundColor: Colors.primary + '10',
+    },
+    soundOptionContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    soundOptionLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        flex: 1,
+    },
+    soundOptionName: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: Colors.text,
+    },
+    soundOptionNameSelected: {
+        color: Colors.primary,
+    },
+    soundOptionDescription: {
+        fontSize: 12,
+        color: Colors.textSecondary,
+        marginTop: 2,
+    },
+    soundOptionRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    playButton: {
+        padding: 4,
+    },
+    soundPickerFooter: {
+        padding: 12,
+        borderTopWidth: 1,
+        borderTopColor: Colors.divider,
+        backgroundColor: Colors.background,
+        gap: 8,
+    },
+    importButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: Colors.surface,
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: Colors.primary,
+        gap: 8,
+    },
+    importButtonText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: Colors.primary,
+    },
+    soundOkButton: {
+        backgroundColor: Colors.primary,
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 12,
+        alignItems: 'center',
+    },
+    soundOkButtonText: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#FFFFFF',
     },
 });
