@@ -1,11 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     ScrollView,
     TouchableOpacity,
-    Dimensions,
 } from 'react-native';
 import { Colors } from '@/constants/theme';
 
@@ -17,14 +16,27 @@ interface CustomTimePickerProps {
 const ITEM_HEIGHT = 48;
 const VISIBLE_ITEMS = 5;
 
-export function CustomTimePicker({ selectedTime, onTimeChange }: CustomTimePickerProps) {
+const getTimeParts = (date: Date) => ({
+    hour: date.getHours() % 12 || 12,
+    minute: date.getMinutes(),
+    period: date.getHours() >= 12 ? 'PM' as const : 'AM' as const,
+});
+
+export const CustomTimePicker = React.memo(function CustomTimePicker({ selectedTime, onTimeChange }: CustomTimePickerProps) {
+    const timeParts = getTimeParts(selectedTime);
     const [selectedHour, setSelectedHour] = useState(selectedTime.getHours() % 12 || 12);
     const [selectedMinute, setSelectedMinute] = useState(selectedTime.getMinutes());
     const [selectedPeriod, setSelectedPeriod] = useState<'AM' | 'PM'>(selectedTime.getHours() >= 12 ? 'PM' : 'AM');
 
+    useEffect(() => {
+        setSelectedHour(timeParts.hour);
+        setSelectedMinute(timeParts.minute);
+        setSelectedPeriod(timeParts.period);
+    }, [timeParts.hour, timeParts.minute, timeParts.period]);
+
     // Generate arrays for hours, minutes
-    const hours = Array.from({ length: 12 }, (_, i) => i + 1);
-    const minutes = Array.from({ length: 60 }, (_, i) => i);
+    const hours = useMemo(() => Array.from({ length: 12 }, (_, i) => i + 1), []);
+    const minutes = useMemo(() => Array.from({ length: 60 }, (_, i) => i), []);
 
     const handleHourChange = (hour: number) => {
         setSelectedHour(hour);
@@ -180,7 +192,7 @@ export function CustomTimePicker({ selectedTime, onTimeChange }: CustomTimePicke
             </View>
         </View>
     );
-}
+});
 
 const styles = StyleSheet.create({
     container: {

@@ -16,11 +16,10 @@ interface TaskSuggestionsProps {
     onSelectSuggestion: (suggestion: TaskSuggestion) => void;
 }
 
-export function TaskSuggestions({ suggestions, onSelectSuggestion }: TaskSuggestionsProps) {
-    console.log('TaskSuggestions component rendered with suggestions:', suggestions);
-    console.log('Number of suggestions:', suggestions.length);
-
-    // DEBUG: Always show the section with info
+export const TaskSuggestions = React.memo(function TaskSuggestions({
+    suggestions,
+    onSelectSuggestion,
+}: TaskSuggestionsProps) {
     const hasNoSuggestions = suggestions.length === 0;
 
     const formatTime = (hour: number, minute: number) => {
@@ -36,9 +35,12 @@ export function TaskSuggestions({ suggestions, onSelectSuggestion }: TaskSuggest
     };
 
     // Show most recent 5 suggestions
-    const recentSuggestions = [...suggestions]
-        .sort((a, b) => new Date(b.lastUsed).getTime() - new Date(a.lastUsed).getTime())
-        .slice(0, 5);
+    const recentSuggestions = React.useMemo(
+        () => [...suggestions]
+            .sort((a, b) => new Date(b.lastUsed).getTime() - new Date(a.lastUsed).getTime())
+            .slice(0, 5),
+        [suggestions]
+    );
 
     return (
         <View style={styles.container}>
@@ -88,7 +90,7 @@ export function TaskSuggestions({ suggestions, onSelectSuggestion }: TaskSuggest
             )}
         </View>
     );
-}
+});
 
 const styles = StyleSheet.create({
     container: {

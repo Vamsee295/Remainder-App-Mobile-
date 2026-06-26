@@ -4,7 +4,6 @@ import {
     Text,
     StyleSheet,
     TouchableOpacity,
-    ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Task } from '@/types';
@@ -115,7 +114,6 @@ export function CalendarView({ tasks, selectedDate, onDateSelect }: CalendarView
                     const isSelected = isSameDay(date, selectedDate);
                     const isCurrentDay = isToday(date);
                     const isPlaceholder = date.getTime() === 0;
-                    const hasActiveTasks = dayTasks.some(t => !t.completed);
 
                     return (
                         <TouchableOpacity

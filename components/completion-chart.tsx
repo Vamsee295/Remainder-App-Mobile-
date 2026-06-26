@@ -26,8 +26,6 @@ export function CompletionChart({ data }: CompletionChartProps) {
         ],
     };
 
-    const maxValue = Math.max(...data.map(d => Math.max(d.completed, d.created)), 1);
-
     return (
         <View style={styles.container}>
             <Text style={styles.title}>Weekly Completion</Text>

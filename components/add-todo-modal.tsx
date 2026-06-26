@@ -74,109 +74,126 @@ export function AddTodoModal({
             visible={visible}
             animationType="slide"
             transparent={true}
+            statusBarTranslucent={Platform.OS === 'android'}
+            navigationBarTranslucent={Platform.OS === 'android'}
             onRequestClose={handleCancel}
         >
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                style={styles.container}
-            >
-                <View style={styles.overlay}>
-                    <View style={styles.modal}>
-                        {/* Header */}
-                        <View style={styles.header}>
-                            <Text style={styles.headerTitle}>New To-Do</Text>
-                            <TouchableOpacity onPress={handleCancel} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                                <Ionicons name="close" size={28} color={Colors.text} />
-                            </TouchableOpacity>
-                        </View>
-
-                        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-                            {/* Text Input */}
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.label}>What do you need to do?</Text>
-                                <TextInput
-                                    style={[styles.input, error && styles.inputError]}
-                                    placeholder="Enter your to-do item"
-                                    placeholderTextColor={Colors.textDisabled}
-                                    value={text}
-                                    onChangeText={(value) => {
-                                        setText(value);
-                                        setError('');
-                                    }}
-                                    maxLength={200}
-                                    multiline
-                                    autoFocus
-                                />
-                                {error && <Text style={styles.errorText}>{error}</Text>}
-                            </View>
-
-                            {/* Deadline Picker */}
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.label}>Deadline (Optional)</Text>
-                                <TouchableOpacity
-                                    style={styles.dateButton}
-                                    onPress={() => {
-                                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                        setShowDatePicker(!showDatePicker);
-                                    }}
-                                >
-                                    <Ionicons name="calendar-outline" size={20} color={Colors.primary} />
-                                    <Text style={styles.dateButtonText}>
-                                        {deadline ? formatDate(deadline) : 'Set deadline'}
-                                    </Text>
-                                    {deadline && (
-                                        <TouchableOpacity
-                                            onPress={() => setDeadline(undefined)}
-                                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                        >
-                                            <Ionicons name="close-circle" size={18} color={Colors.textSecondary} />
-                                        </TouchableOpacity>
-                                    )}
-                                </TouchableOpacity>
-
-                                {showDatePicker && (
-                                    <View style={styles.calendarContainer}>
-                                        <CustomCalendarPicker
-                                            selectedDate={deadline || new Date()}
-                                            onDateChange={(date) => {
-                                                setDeadline(date);
-                                                setShowDatePicker(false);
-                                            }}
-                                            minimumDate={new Date()}
-                                        />
-                                    </View>
-                                )}
-                            </View>
-                        </ScrollView>
-
-                        {/* Footer Buttons */}
-                        <View style={styles.footer}>
-                            <TouchableOpacity
-                                style={[styles.button, styles.buttonSecondary]}
-                                onPress={handleCancel}
-                            >
-                                <Text style={styles.buttonSecondaryText}>Cancel</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={styles.button}
-                                onPress={handleSave}
-                            >
-                                <LinearGradient
-                                    colors={['#cbe7ff', '#a0cfff', '#7bc3ff', '#56aaff']}
-                                    start={{ x: 0.5, y: 0 }}
-                                    end={{ x: 0.5, y: 1 }}
-                                    style={styles.buttonPrimaryGradient}
-                                >
-                                    <Text style={styles.buttonPrimaryText}>Add</Text>
-                                </LinearGradient>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
+            {Platform.OS === 'ios' ? (
+                <KeyboardAvoidingView behavior="padding" style={styles.container}>
+                    {renderModalContent()}
+                </KeyboardAvoidingView>
+            ) : (
+                <View style={styles.container}>
+                    {renderModalContent()}
                 </View>
-            </KeyboardAvoidingView>
+            )}
         </Modal>
     );
+
+    function renderModalContent() {
+        return (
+            <View style={styles.overlay}>
+                <View style={styles.modal}>
+                    {/* Header */}
+                    <View style={styles.header}>
+                        <Text style={styles.headerTitle}>New To-Do</Text>
+                        <TouchableOpacity onPress={handleCancel} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                            <Ionicons name="close" size={28} color={Colors.text} />
+                        </TouchableOpacity>
+                    </View>
+
+                    <ScrollView
+                        style={styles.content}
+                        contentContainerStyle={styles.contentContainer}
+                        showsVerticalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
+                        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                    >
+                        {/* Text Input */}
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>What do you need to do?</Text>
+                            <TextInput
+                                style={[styles.input, error && styles.inputError]}
+                                placeholder="Enter your to-do item"
+                                placeholderTextColor={Colors.textDisabled}
+                                value={text}
+                                onChangeText={(value) => {
+                                    setText(value);
+                                    setError('');
+                                }}
+                                maxLength={200}
+                                multiline
+                                autoFocus
+                            />
+                            {error && <Text style={styles.errorText}>{error}</Text>}
+                        </View>
+
+                        {/* Deadline Picker */}
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Deadline (Optional)</Text>
+                            <TouchableOpacity
+                                style={styles.dateButton}
+                                onPress={() => {
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                    setShowDatePicker(!showDatePicker);
+                                }}
+                            >
+                                <Ionicons name="calendar-outline" size={20} color={Colors.primary} />
+                                <Text style={styles.dateButtonText}>
+                                    {deadline ? formatDate(deadline) : 'Set deadline'}
+                                </Text>
+                                {deadline && (
+                                    <TouchableOpacity
+                                        onPress={() => setDeadline(undefined)}
+                                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                    >
+                                        <Ionicons name="close-circle" size={18} color={Colors.textSecondary} />
+                                    </TouchableOpacity>
+                                )}
+                            </TouchableOpacity>
+
+                            {showDatePicker && (
+                                <View style={styles.calendarContainer}>
+                                    <CustomCalendarPicker
+                                        selectedDate={deadline || new Date()}
+                                        onDateChange={(date) => {
+                                            setDeadline(date);
+                                            setShowDatePicker(false);
+                                        }}
+                                        minimumDate={new Date()}
+                                    />
+                                </View>
+                            )}
+                        </View>
+                    </ScrollView>
+
+                    {/* Footer Buttons */}
+                    <View style={styles.footer}>
+                        <TouchableOpacity
+                            style={[styles.button, styles.buttonSecondary]}
+                            onPress={handleCancel}
+                        >
+                            <Text style={styles.buttonSecondaryText}>Cancel</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.button}
+                            onPress={handleSave}
+                        >
+                            <LinearGradient
+                                colors={['#cbe7ff', '#a0cfff', '#7bc3ff', '#56aaff']}
+                                start={{ x: 0.5, y: 0 }}
+                                end={{ x: 0.5, y: 1 }}
+                                style={styles.buttonPrimaryGradient}
+                            >
+                                <Text style={styles.buttonPrimaryText}>Add</Text>
+                            </LinearGradient>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </View>
+        );
+    }
 }
 
 const styles = StyleSheet.create({
@@ -221,6 +238,9 @@ const styles = StyleSheet.create({
         color: Colors.text,
     },
     content: {
+        flexShrink: 1,
+    },
+    contentContainer: {
         paddingHorizontal: 20,
         paddingVertical: 20,
     },

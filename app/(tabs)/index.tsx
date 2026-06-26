@@ -27,7 +27,6 @@ export default function TasksScreen() {
   const [selectedPriority, setSelectedPriority] = useState<TaskPriority | 'all'>('all');
   const [modalVisible, setModalVisible] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   // Load tasks on mount
@@ -107,7 +106,6 @@ export default function TasksScreen() {
     } catch (error) {
       console.error('Error loading tasks:', error);
     } finally {
-      setLoading(false);
       setRefreshing(false);
     }
   };
@@ -562,4 +560,3 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
-

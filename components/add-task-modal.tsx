@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     View,
     Text,
@@ -11,7 +11,6 @@ import {
     KeyboardAvoidingView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
@@ -24,7 +23,6 @@ import { CategorySelector } from './category-selector';
 import { PrioritySelector } from './priority-selector';
 import { RecurrenceSelector } from './recurrence-selector';
 import { StorageService } from '@/services/storage-service';
-import { AlarmService } from '@/services/alarm-service';
 import * as MediaLibrary from 'expo-media-library';
 import * as DocumentPicker from 'expo-document-picker';
 
@@ -36,6 +34,13 @@ interface AddTaskModalProps {
     onCancel: () => void;
 }
 
+const getDefaultTaskDate = () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(9, 0, 0, 0);
+    return tomorrow;
+};
+
 export function AddTaskModal({
     visible,
     task,
@@ -45,8 +50,8 @@ export function AddTaskModal({
 }: AddTaskModalProps) {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
-    const [selectedDate, setSelectedDate] = useState(new Date());
-    const [selectedTime, setSelectedTime] = useState(new Date());
+    const [selectedDate, setSelectedDate] = useState(getDefaultTaskDate);
+    const [selectedTime, setSelectedTime] = useState(getDefaultTaskDate);
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showTimePicker, setShowTimePicker] = useState(false);
     const [errors, setErrors] = useState<{ title?: string; dateTime?: string }>({});
@@ -57,9 +62,50 @@ export function AddTaskModal({
     const [enableAlarm, setEnableAlarm] = useState(true); // Alarm enabled by default
     const [selectedAlarmSound, setSelectedAlarmSound] = useState('default'); // Selected alarm sound ID
     const [showSoundPicker, setShowSoundPicker] = useState(false); // Sound picker modal
+    const [minimumDate, setMinimumDate] = useState(() => new Date());
+
+    const resetForm = useCallback(() => {
+        const defaultDate = getDefaultTaskDate();
+
+        setTitle('');
+        setDescription('');
+        setSelectedDate(defaultDate);
+        setSelectedTime(defaultDate);
+        setSelectedCategory('other');
+        setSelectedPriority('low');
+        setSelectedRecurrence('none');
+        setEnableAlarm(true);
+        setShowDatePicker(false);
+        setShowTimePicker(false);
+        setShowSoundPicker(false);
+        setErrors({});
+    }, []);
+
+    const loadSavedAlarmSound = useCallback(async () => {
+        try {
+            const savedSound = await StorageService.loadSelectedAlarmSound();
+            setSelectedAlarmSound(savedSound);
+        } catch (error) {
+            console.error('Error loading alarm sound:', error);
+        }
+    }, []);
+
+    const loadSuggestions = useCallback(async () => {
+        try {
+            const loadedSuggestions = await StorageService.loadTaskSuggestions();
+            setSuggestions(loadedSuggestions);
+        } catch (error) {
+            console.error('Error loading suggestions:', error);
+        }
+    }, []);
 
     useEffect(() => {
         if (visible) {
+            setMinimumDate(new Date());
+            setShowDatePicker(false);
+            setShowTimePicker(false);
+            setShowSoundPicker(false);
+
             if (task) {
                 // Edit mode
                 setTitle(task.title);
@@ -70,10 +116,12 @@ export function AddTaskModal({
                 setSelectedCategory(task.category || 'other');
                 setSelectedPriority(task.priority || 'low');
                 setSelectedRecurrence(task.recurrence || 'none');
+                setEnableAlarm(Boolean(task.notificationIds?.length || (task.recurrence && task.recurrence !== 'none')));
             } else if (prefilledDate) {
                 // Prefilled date from calendar
                 setSelectedDate(prefilledDate);
                 setSelectedTime(prefilledDate);
+                setEnableAlarm(true);
             } else {
                 // Reset for new task
                 resetForm();
@@ -82,42 +130,12 @@ export function AddTaskModal({
             loadSuggestions();
             loadSavedAlarmSound(); // Load saved alarm sound preference
         }
-    }, [visible, task, prefilledDate]);
+    }, [visible, task, prefilledDate, resetForm, loadSuggestions, loadSavedAlarmSound]);
 
-    const loadSavedAlarmSound = async () => {
-        try {
-            const savedSound = await StorageService.loadSelectedAlarmSound();
-            setSelectedAlarmSound(savedSound);
-        } catch (error) {
-            console.error('Error loading alarm sound:', error);
-        }
-    };
-
-    const loadSuggestions = async () => {
-        try {
-            console.log('Loading suggestions...');
-            const loadedSuggestions = await StorageService.loadTaskSuggestions();
-            console.log('Loaded suggestions from storage:', loadedSuggestions);
-            console.log('Number of loaded suggestions:', loadedSuggestions.length);
-            setSuggestions(loadedSuggestions);
-        } catch (error) {
-            console.error('Error loading suggestions:', error);
-        }
-    };
-
-    const resetForm = () => {
-        setTitle('');
-        setDescription('');
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        tomorrow.setHours(9, 0, 0, 0);
-        setSelectedDate(tomorrow);
-        setSelectedTime(tomorrow);
-        setSelectedCategory('other');
-        setSelectedPriority('low');
-        setSelectedRecurrence('none');
-        setEnableAlarm(true); // Reset alarm toggle
-    };
+    const selectedAlarmSoundName = useMemo(
+        () => DEFAULT_ALARM_SOUNDS.find(s => s.id === selectedAlarmSound)?.name || 'Select Sound',
+        [selectedAlarmSound]
+    );
 
     const validateForm = (): boolean => {
         const newErrors: { title?: string; dateTime?: string } = {};
@@ -166,32 +184,6 @@ export function AddTaskModal({
         onCancel();
     };
 
-    const handleDateChange = (event: any, date?: Date) => {
-        if (Platform.OS === 'android') {
-            setShowDatePicker(false);
-        }
-        if (date) {
-            setSelectedDate(date);
-            if (Platform.OS === 'android') {
-                // Auto-close on Android after selection
-                setShowDatePicker(false);
-            }
-        }
-    };
-
-    const handleTimeChange = (event: any, date?: Date) => {
-        if (Platform.OS === 'android') {
-            setShowTimePicker(false);
-        }
-        if (date) {
-            setSelectedTime(date);
-            if (Platform.OS === 'android') {
-                // Auto-close on Android after selection
-                setShowTimePicker(false);
-            }
-        }
-    };
-
     const formatDate = (date: Date) => {
         return date.toLocaleDateString('en-US', {
             month: 'short',
@@ -208,7 +200,7 @@ export function AddTaskModal({
         });
     };
 
-    const handleSelectSuggestion = async (suggestion: TaskSuggestion) => {
+    const handleSelectSuggestion = useCallback(async (suggestion: TaskSuggestion) => {
         // Populate form with suggestion data
         setTitle(suggestion.title);
         setDescription(suggestion.description || '');
@@ -224,36 +216,74 @@ export function AddTaskModal({
 
         // Reload suggestions to reflect updated usage
         loadSuggestions();
-    };
+    }, [loadSuggestions]);
 
-    const handleCategorySelect = (category: TaskCategory) => {
+    const handleCategorySelect = useCallback((category: TaskCategory) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         setSelectedCategory(category);
-    };
+    }, []);
 
-    const handlePrioritySelect = (priority: TaskPriority) => {
+    const handlePrioritySelect = useCallback((priority: TaskPriority) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         setSelectedPriority(priority);
-    };
+    }, []);
 
-    const handleRecurrenceSelect = (recurrence: RecurrenceType) => {
+    const handleRecurrenceSelect = useCallback((recurrence: RecurrenceType) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         setSelectedRecurrence(recurrence);
-    };
+    }, []);
+
+    const handleTitleChange = useCallback((value: string) => {
+        setTitle(value);
+        if (errors.title) {
+            setErrors(prevErrors => ({ ...prevErrors, title: undefined }));
+        }
+    }, [errors.title]);
+
+    const handleDateSelect = useCallback((date: Date) => {
+        setSelectedDate(date);
+        if (errors.dateTime) {
+            setErrors(prevErrors => ({ ...prevErrors, dateTime: undefined }));
+        }
+    }, [errors.dateTime]);
+
+    const handleTimeSelect = useCallback((time: Date) => {
+        setSelectedTime(time);
+        if (errors.dateTime) {
+            setErrors(prevErrors => ({ ...prevErrors, dateTime: undefined }));
+        }
+    }, [errors.dateTime]);
 
     return (
         <Modal
             visible={visible}
             animationType="slide"
             transparent={true}
+            statusBarTranslucent={Platform.OS === 'android'}
+            navigationBarTranslucent={Platform.OS === 'android'}
             onRequestClose={handleCancel}
         >
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                style={styles.container}
-            >
+            {Platform.OS === 'ios' ? (
+                <KeyboardAvoidingView behavior="padding" style={styles.container}>
+                    <View style={styles.overlay}>
+                        <View style={styles.modal}>
+                            {renderModalContent()}
+                        </View>
+                    </View>
+                </KeyboardAvoidingView>
+            ) : (
                 <View style={styles.overlay}>
                     <View style={styles.modal}>
+                        {renderModalContent()}
+                    </View>
+                </View>
+            )}
+        </Modal>
+    );
+
+    function renderModalContent() {
+        return (
+            <>
                         {/* Header */}
                         <View style={styles.header}>
                             <Text style={styles.headerTitle}>
@@ -264,7 +294,13 @@ export function AddTaskModal({
                             </TouchableOpacity>
                         </View>
 
-                        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+                        <ScrollView
+                            style={styles.content}
+                            contentContainerStyle={styles.contentContainer}
+                            showsVerticalScrollIndicator={false}
+                            keyboardShouldPersistTaps="handled"
+                            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                        >
                             {/* Title Input */}
                             <View style={styles.inputGroup}>
                                 <Text style={styles.label}>Title *</Text>
@@ -273,7 +309,7 @@ export function AddTaskModal({
                                     placeholder="What do you need to do?"
                                     placeholderTextColor={Colors.textDisabled}
                                     value={title}
-                                    onChangeText={setTitle}
+                                    onChangeText={handleTitleChange}
                                     maxLength={100}
                                 />
                                 {errors.title && <Text style={styles.errorText}>{errors.title}</Text>}
@@ -342,7 +378,7 @@ export function AddTaskModal({
                                     >
                                         <Ionicons name="musical-notes" size={20} color={Colors.primary} />
                                         <Text style={styles.soundPickerButtonText}>
-                                            {DEFAULT_ALARM_SOUNDS.find(s => s.id === selectedAlarmSound)?.name || 'Select Sound'}
+                                            {selectedAlarmSoundName}
                                         </Text>
                                         <Ionicons name={showSoundPicker ? "chevron-up" : "chevron-down"} size={20} color={Colors.textSecondary} />
                                     </TouchableOpacity>
@@ -523,10 +559,8 @@ export function AddTaskModal({
                                     <View style={styles.customPickerContainer}>
                                         <CustomCalendarPicker
                                             selectedDate={selectedDate}
-                                            onDateChange={(date) => {
-                                                setSelectedDate(date);
-                                            }}
-                                            minimumDate={new Date()}
+                                            onDateChange={handleDateSelect}
+                                            minimumDate={minimumDate}
                                         />
                                     </View>
                                 )}
@@ -553,9 +587,7 @@ export function AddTaskModal({
                                     <View style={styles.customPickerContainer}>
                                         <CustomTimePicker
                                             selectedTime={selectedTime}
-                                            onTimeChange={(time) => {
-                                                setSelectedTime(time);
-                                            }}
+                                            onTimeChange={handleTimeSelect}
                                         />
                                     </View>
                                 )}
@@ -596,11 +628,9 @@ export function AddTaskModal({
                                 </LinearGradient>
                             </TouchableOpacity>
                         </View>
-                    </View>
-                </View>
-            </KeyboardAvoidingView>
-        </Modal>
-    );
+            </>
+        );
+    }
 }
 
 const styles = StyleSheet.create({
@@ -616,6 +646,7 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.surface,
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
+        alignSelf: 'stretch',
         maxHeight: '90%',
         ...Platform.select({
             ios: {
@@ -645,6 +676,9 @@ const styles = StyleSheet.create({
         color: Colors.text,
     },
     content: {
+        flexShrink: 1,
+    },
+    contentContainer: {
         paddingHorizontal: 20,
         paddingVertical: 20,
     },
