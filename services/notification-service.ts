@@ -88,29 +88,26 @@ export class NotificationService {
                 return null;
             }
 
-            // **USE NATIVE ALARM MODULE ON ANDROID**
-            if (Platform.OS === 'android' && AlarmModule) {
+            // A real ringing alarm on Android (loops until dismissed or snoozed).
+            // Tasks saved with the alarm switched off skip this and get a quiet notification below.
+            if (Platform.OS === 'android' && AlarmModule && task.alarmEnabled !== false) {
                 try {
-                    console.log('Using native AlarmModule for Android');
-
-                    // Get custom sound URI from storage if available
                     const { StorageService } = require('./storage-service');
                     const soundUri = await StorageService.loadSelectedAlarmSound();
+                    const repeats = Boolean(task.recurrence && task.recurrence !== 'none');
 
-                    // Schedule native alarm
                     await AlarmModule.setAlarm(
                         task.id,
                         taskDate.getTime(),
                         soundUri && soundUri.startsWith('content://') ? soundUri : 'default',
                         task.title,
-                        task.description || 'Your reminder is due'
+                        task.description || '',
+                        repeats, // every repeat type rings daily; weekly / monthly just stop at the deadline
+                        task.deadlineDate ? new Date(task.deadlineDate).getTime() : 0
                     );
-
-                    console.log(`Native alarm scheduled for: ${taskDate.toLocaleString()}`);
-                    return [task.id]; // Return task ID as alarm ID
+                    return [task.id];
                 } catch (error) {
-                    console.error('Error using native alarm, falling back to notifications:', error);
-                    // Fall through to use expo-notifications as backup
+                    console.error('Native alarm failed, falling back to a notification:', error);
                 }
             }
 
@@ -186,6 +183,26 @@ export class NotificationService {
         }
     }
 
+    /** True when this device can ring real alarms (Android build with the native module). */
+    static canRing(): boolean {
+        return Platform.OS === 'android' && Boolean(AlarmModule);
+    }
+
+    /** Ring a test alarm a few seconds from now, to check sound and the full-screen alarm. */
+    static async ringTestAlarm(seconds = 10): Promise<void> {
+        const { StorageService } = require('./storage-service');
+        const soundUri = await StorageService.loadSelectedAlarmSound();
+        await AlarmModule.setAlarm(
+            'test-alarm',
+            Date.now() + seconds * 1000,
+            soundUri && soundUri.startsWith('content://') ? soundUri : 'default',
+            'Test alarm',
+            'If you can hear this, alarms work.',
+            false,
+            0
+        );
+    }
+
     /**
      * Cancel a scheduled notification
      */
@@ -204,7 +221,13 @@ export class NotificationService {
     static async cancelMultipleNotifications(notificationIds: string[]): Promise<void> {
         try {
             await Promise.all(
-                notificationIds.map(id => Notifications.cancelScheduledNotificationAsync(id))
+                notificationIds.map(async id => {
+                    // An id can be a native alarm (the task id) or an expo notification id: cancel both ways.
+                    if (Platform.OS === 'android' && AlarmModule) {
+                        await AlarmModule.cancelAlarm(id).catch(() => {});
+                    }
+                    await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
+                })
             );
             console.log(`Cancelled ${notificationIds.length} notifications`);
         } catch (error) {

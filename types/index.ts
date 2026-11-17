@@ -25,6 +25,7 @@ export interface Task {
   deadlineDate?: string | null; // null for Daily mode, ISO date for Weekly/Monthly
   isExpired?: boolean; // Track if alarm deadline has passed
   alarmSnoozedCount?: number; // Track how many times alarm was snoozed
+  alarmEnabled?: boolean; // false = quiet notification only, no ringing alarm (default true)
 }
 
 export interface TaskFormData {

@@ -1,220 +1,137 @@
-import React, { useState } from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    SafeAreaView,
-    StatusBar,
-    ScrollView,
-} from 'react-native';
-import { useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { Task } from '@/types';
-import { StorageService } from '@/services/storage-service';
+import React from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
+
+import { Card, Empty, Screen, ScreenHeader, SectionHeader, Stamp, Txt } from '@/components/kit';
+import { CATEGORIES } from '@/constants/categories';
+import { BW, C } from '@/constants/theme';
+import { useTasks } from '@/hooks/use-tasks';
 import { StatisticsService } from '@/services/statistics-service';
-import { StatCard } from '@/components/stat-card';
-import { Colors } from '@/constants/theme';
 
-export default function StatisticsScreenSimple() {
-    const [tasks, setTasks] = useState<Task[]>([]);
+export default function StatisticsScreen() {
+  const { tasks } = useTasks();
 
-    const loadTasks = async () => {
-        try {
-            const loadedTasks = await StorageService.loadTasks();
-            setTasks(loadedTasks);
-        } catch (error) {
-            console.error('Error loading tasks:', error);
-        }
-    };
+  const stats = StatisticsService.getCompletionStats(tasks);
+  const streak = StatisticsService.getStreakInfo(tasks);
+  const week = StatisticsService.getWeeklyData(tasks);
+  const weekMax = Math.max(1, ...week.map((d) => d.created));
+  const byCategory = CATEGORIES.map((c) => ({ ...c, count: tasks.filter((t) => (t.category ?? 'other') === c.value).length })).filter((c) => c.count);
+  const categoryMax = Math.max(1, ...byCategory.map((c) => c.count));
+  const rate = Math.round(stats.completionRate);
 
-    // Reload tasks when screen comes into focus
-    useFocusEffect(
-        React.useCallback(() => {
-            loadTasks();
-        }, [])
-    );
+  return (
+    <Screen>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScreenHeader
+          eyebrow="Remainder / Stats"
+          hand="how it's going so far"
+          title="Your"
+          mark="Numbers."
+          right={streak.currentStreak > 0 ? <Stamp label={`${streak.currentStreak} day streak`} /> : null}
+        />
 
-    const stats = StatisticsService.getCompletionStats(tasks);
-    const streakInfo = StatisticsService.getStreakInfo(tasks);
-    const productiveTime = StatisticsService.getMostProductiveTime(tasks);
+        {tasks.length === 0 ? (
+          <Empty title="No data yet" hint="finish a few tasks and come back" />
+        ) : (
+          <>
+            <Card dark style={styles.rateCard}>
+              <Txt v="label" color={C.mint}>
+                Completion rate
+              </Txt>
+              <Txt v="display" color={C.paper}>
+                {rate}%
+              </Txt>
+              <View style={styles.track} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: rate }}>
+                <View style={[styles.fill, { width: `${rate}%` }]} />
+              </View>
+              <Txt v="mono" color={C.paper} style={styles.small}>
+                {`> ${stats.totalCompleted} of ${stats.totalCreated} tasks done`}
+              </Txt>
+            </Card>
 
-    return (
-        <SafeAreaView style={styles.safeArea}>
-            <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
-
-            <View style={styles.container}>
-                {/* Header */}
-                <View style={styles.header}>
-                    <View style={styles.headerContent}>
-                        <Ionicons name="stats-chart" size={32} color={Colors.primary} />
-                        <View style={styles.headerText}>
-                            <Text style={styles.headerTitle}>Statistics</Text>
-                            <Text style={styles.headerSubtitle}>Track your productivity</Text>
-                        </View>
-                    </View>
-                </View>
-
-                <ScrollView
-                    style={styles.scrollView}
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={styles.scrollContent}
-                >
-                    {/* Overview Stats */}
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Overview</Text>
-                        <View style={styles.statsGrid}>
-                            <View style={styles.statItem}>
-                                <StatCard
-                                    icon="checkmark-done"
-                                    title="Completion Rate"
-                                    value={`${stats.completionRate.toFixed(0)}%`}
-                                    subtitle={`${stats.totalCompleted} of ${stats.totalCreated} tasks`}
-                                    color={Colors.success}
-                                />
-                            </View>
-
-                            <View style={styles.statItem}>
-                                <StatCard
-                                    icon="flame"
-                                    title="Current Streak"
-                                    value={`${streakInfo.currentStreak} ${streakInfo.currentStreak === 1 ? 'day' : 'days'}`}
-                                    subtitle={`Best: ${streakInfo.longestStreak} days`}
-                                    color="#f97316"
-                                />
-                            </View>
-
-                            <View style={styles.statItem}>
-                                <StatCard
-                                    icon="create"
-                                    title="Total Created"
-                                    value={stats.totalCreated}
-                                    subtitle="All time"
-                                    color={Colors.primary}
-                                />
-                            </View>
-
-                            <View style={styles.statItem}>
-                                <StatCard
-                                    icon="checkbox"
-                                    title="Total Completed"
-                                    value={stats.totalCompleted}
-                                    subtitle="All time"
-                                    color={Colors.success}
-                                />
-                            </View>
-
-                            <View style={styles.statItem}>
-                                <StatCard
-                                    icon="list"
-                                    title="Active Tasks"
-                                    value={stats.activeCount}
-                                    subtitle="Pending completion"
-                                    color={Colors.warning}
-                                />
-                            </View>
-
-                            <View style={styles.statItem}>
-                                <StatCard
-                                    icon="time"
-                                    title="Most Productive"
-                                    value={productiveTime}
-                                    subtitle="Peak productivity time"
-                                    color="#8b5cf6"
-                                />
-                            </View>
-                        </View>
-                    </View>
-
-                    {/* Empty State */}
-                    {tasks.length === 0 && (
-                        <View style={styles.emptyState}>
-                            <Ionicons name="bar-chart-outline" size={64} color={Colors.textDisabled} />
-                            <Text style={styles.emptyTitle}>No Data Yet</Text>
-                            <Text style={styles.emptyText}>
-                                Start creating and completing tasks to see your statistics!
-                            </Text>
-                        </View>
-                    )}
-                </ScrollView>
+            <View style={styles.grid}>
+              <Tile label="Open" value={stats.activeCount} />
+              <Tile label="Done" value={stats.totalCompleted} />
+              <Tile label="Streak days" value={streak.currentStreak} />
+              <Tile label="Best streak" value={streak.longestStreak} />
             </View>
-        </SafeAreaView>
-    );
+
+            <SectionHeader n={1} eyebrow="Last 7 days" title="This week" />
+            <Card>
+              <View style={styles.bars}>
+                {week.map((d, i) => (
+                  <View key={i} style={styles.barCol} accessibilityLabel={`${d.day}: ${d.completed} of ${d.created} done`}>
+                    <Txt v="label" style={styles.barNum}>
+                      {d.created || ''}
+                    </Txt>
+                    <View style={[styles.bar, { height: Math.max(4, (d.created / weekMax) * 90) }]}>
+                      <View style={[styles.barDone, { height: d.created ? `${(d.completed / d.created) * 100}%` : 0 }]} />
+                    </View>
+                    <Txt v="label">{d.day.slice(0, 2)}</Txt>
+                  </View>
+                ))}
+              </View>
+              <View style={styles.legend}>
+                <View style={[styles.swatch, { backgroundColor: C.accent }]} />
+                <Txt v="label">Done</Txt>
+                <View style={[styles.swatch, { backgroundColor: C.card }]} />
+                <Txt v="label">Planned</Txt>
+              </View>
+            </Card>
+
+            <SectionHeader n={2} eyebrow="Where the work goes" title="By category" />
+            <Card style={styles.categoryCard}>
+              {byCategory.map((c) => (
+                <View key={c.value} style={styles.catRow}>
+                  <Txt v="mono" style={styles.catLabel}>
+                    {c.label}
+                  </Txt>
+                  <View style={styles.catTrack}>
+                    <View style={[styles.catFill, { width: `${(c.count / categoryMax) * 100}%`, backgroundColor: c.color }]} />
+                  </View>
+                  <Txt v="mono" style={styles.catCount}>
+                    {c.count}
+                  </Txt>
+                </View>
+              ))}
+            </Card>
+
+            <SectionHeader n={3} eyebrow="When you finish things" title="Best time" />
+            <Txt v="mono">{`> ${StatisticsService.getMostProductiveTime(tasks)}`}</Txt>
+          </>
+        )}
+      </ScrollView>
+    </Screen>
+  );
+}
+
+function Tile({ label, value }: { label: string; value: string | number }) {
+  return (
+    <Card style={styles.tile}>
+      <Txt v="label">{label}</Txt>
+      <Txt v="hero">{value}</Txt>
+    </Card>
+  );
 }
 
 const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
-        backgroundColor: Colors.background,
-    },
-    container: {
-        flex: 1,
-        backgroundColor: Colors.background,
-    },
-    header: {
-        paddingHorizontal: 16,
-        paddingTop: 48,
-        paddingBottom: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: Colors.divider,
-    },
-    headerContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    headerText: {
-        flex: 1,
-    },
-    headerTitle: {
-        fontSize: 32,
-        fontWeight: '700',
-        color: Colors.text,
-    },
-    headerSubtitle: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: Colors.textSecondary,
-        marginTop: 2,
-    },
-    scrollView: {
-        flex: 1,
-    },
-    scrollContent: {
-        padding: 16,
-        paddingBottom: 100,
-    },
-    section: {
-        marginBottom: 24,
-    },
-    sectionTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: Colors.text,
-        marginBottom: 16,
-    },
-    statsGrid: {
-        gap: 12,
-    },
-    statItem: {
-        marginBottom: 0,
-    },
-    emptyState: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 60,
-    },
-    emptyTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: Colors.text,
-        marginTop: 16,
-        marginBottom: 8,
-    },
-    emptyText: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: Colors.textSecondary,
-        textAlign: 'center',
-        maxWidth: 280,
-    },
+  content: { padding: 20, paddingRight: 26, paddingBottom: 48 },
+  rateCard: { gap: 6 },
+  small: { fontSize: 12, marginTop: 4 },
+  track: { height: 14, borderRadius: 7, backgroundColor: '#3a332e', overflow: 'hidden', marginTop: 4 },
+  fill: { height: '100%', backgroundColor: C.accent, borderRadius: 7 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginTop: 20 },
+  tile: { flexGrow: 1, flexBasis: '40%', padding: 14, gap: 2 },
+  bars: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', height: 140 },
+  barCol: { alignItems: 'center', gap: 6, flex: 1 },
+  barNum: { letterSpacing: 0 },
+  bar: { width: 22, borderWidth: BW, borderColor: C.ink, borderRadius: 5, backgroundColor: C.card, justifyContent: 'flex-end', overflow: 'hidden' },
+  barDone: { backgroundColor: C.accent },
+  legend: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 },
+  swatch: { width: 12, height: 12, borderWidth: 1.5, borderColor: C.ink, borderRadius: 3, marginLeft: 6 },
+  categoryCard: { gap: 12 },
+  catRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  catLabel: { width: 78, fontSize: 12 },
+  catTrack: { flex: 1, height: 12, borderRadius: 6, backgroundColor: C.paper2, overflow: 'hidden' },
+  catFill: { height: '100%', borderRadius: 6 },
+  catCount: { width: 24, textAlign: 'right', fontSize: 12 },
 });
