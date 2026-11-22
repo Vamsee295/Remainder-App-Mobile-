@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, SectionList, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, SectionList, StyleSheet, View } from 'react-native';
 
 import { Card, Chip, Empty, Fab, Field, IconButton, PromptInput, Screen, ScreenHeader, SectionHeader, Segmented, Stamp, Txt } from '@/components/kit';
 import { TaskRow } from '@/components/task-row';
@@ -11,6 +11,7 @@ import { useHealth } from '@/hooks/use-health';
 import { useTasks } from '@/hooks/use-tasks';
 import { loadSettings } from '@/services/app-settings';
 import { parseQuickAdd } from '@/services/quick-add';
+import { canListen, listen } from '@/services/voice';
 import { Task, TaskCategory, TaskFilter } from '@/types';
 
 const FILTERS: { value: TaskFilter; label: string }[] = [
@@ -81,7 +82,9 @@ export default function TasksScreen() {
   const sections = groupByDay(shown);
 
   const submitQuick = async () => {
-    const { title, when, recurrence, repeatDays } = parseQuickAdd(quick);
+    // A pasted shared reminder: keep its first line, drop the 🔔.
+    const line = quick.split('\n')[0].replace(/^🔔\s*/u, '');
+    const { title, when, recurrence, repeatDays } = parseQuickAdd(line);
     if (!title) return;
     const { defaultRing } = await loadSettings();
     saveTask({ title, date: when, time: when, category: 'other', priority: 'low', recurrence, repeatDays, enableAlarm: defaultRing });
@@ -140,6 +143,20 @@ export default function TasksScreen() {
             placeholder="call mom friday 6pm"
             returnKeyType="done"
             accessibilityLabel="Quick add a task. Type a title and a time, then press enter."
+            right={
+              canListen ? (
+                <IconButton
+                  icon="mic-sharp"
+                  label="Say a task"
+                  color={C.accent}
+                  onPress={() =>
+                    listen('Say a task, like "call mom friday at 6 pm"')
+                      .then((said) => said && setQuick(said)) // fills the box so you can check it, then press enter
+                      .catch((e) => Alert.alert('Voice typing', e instanceof Error ? e.message : 'Not available.'))
+                  }
+                />
+              ) : null
+            }
           />
 
           <Segmented options={FILTERS} value={filter} onChange={setFilter} />

@@ -272,11 +272,12 @@ export function Field({ style, ...rest }: TextInputProps) {
 
 /* ---------- PromptInput: "> type here" ---------- */
 
-export function PromptInput({ style, ...rest }: TextInputProps) {
+export function PromptInput({ style, right, ...rest }: TextInputProps & { right?: React.ReactNode }) {
   return (
     <View style={styles.prompt}>
       <Text style={[text.mono, { color: C.accent }]}>{'>'}</Text>
       <TextInput placeholderTextColor={C.mute} style={[text.mono, styles.promptInput, style]} {...rest} />
+      {right}
     </View>
   );
 }

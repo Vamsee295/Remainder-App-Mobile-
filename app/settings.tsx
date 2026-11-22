@@ -10,6 +10,7 @@ import { useTasks } from '@/hooks/use-tasks';
 import { AppSettings, DEFAULT_SETTINGS, loadSettings, saveSettings } from '@/services/app-settings';
 import { exportBackup, pickBackup } from '@/services/backup-service';
 import { NotificationService } from '@/services/notification-service';
+import { askCalendarPermission, canUseCalendar } from '@/services/phone-calendar';
 import { StorageService } from '@/services/storage-service';
 import { Task } from '@/types';
 
@@ -181,6 +182,25 @@ export default function SettingsScreen() {
           ))}
         </View>
         <Txt v="mono" style={styles.hint}>{'> Then it stops and leaves a "Missed alarm" note with Done / Snooze.'}</Txt>
+
+        {canUseCalendar ? (
+          <>
+            <FieldLabel>Show my phone calendar in the Calendar tab</FieldLabel>
+            <View style={styles.chips}>
+              <Chip label="Off" active={!prefs.showCalendar} color={C.ink} onPress={() => update({ showCalendar: false })} />
+              <Chip
+                label="On"
+                active={prefs.showCalendar}
+                color={C.teal}
+                onPress={async () => {
+                  if (await askCalendarPermission()) update({ showCalendar: true });
+                  else say('Calendar not allowed', 'Allow calendar access for Remainder in your phone settings to see your events.');
+                }}
+              />
+            </View>
+            <Txt v="mono" style={styles.hint}>{'> Read-only: your events show next to tasks, with a "Remind me" button. Google Calendar works if it syncs to this phone.'}</Txt>
+          </>
+        ) : null}
 
         <SectionHeader n={3} eyebrow="Your data" title="Backup" />
         <Txt style={styles.why}>

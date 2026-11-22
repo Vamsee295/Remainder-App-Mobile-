@@ -2,7 +2,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as Haptics from 'expo-haptics';
 import * as MediaLibrary from 'expo-media-library';
 import React, { useEffect, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
 
 import { Button, Card, Checkbox, Chip, Field, FieldLabel, IconButton, Sheet, Txt } from '@/components/kit';
 import { MonthGrid } from '@/components/month-grid';
@@ -10,9 +10,11 @@ import { formatDay, formatTime } from '@/components/task-row';
 import { CATEGORIES, PRIORITIES, RECURRENCES } from '@/constants/categories';
 import { BW, C, R, SH } from '@/constants/theme';
 import { loadSettings } from '@/services/app-settings';
+import { askBackgroundLocation, canUsePlaces, captureHere, PLACE_RADIUS_M } from '@/services/geofence';
 import { NotificationService } from '@/services/notification-service';
+import { shareTaskText } from '@/services/share-format';
 import { StorageService } from '@/services/storage-service';
-import { RecurrenceType, SubTask, Task, TaskCategory, TaskFormData, TaskPriority, TaskSuggestion } from '@/types';
+import { RecurrenceType, SubTask, Task, TaskPlace, TaskCategory, TaskFormData, TaskPriority, TaskSuggestion } from '@/types';
 
 type Props = {
   visible: boolean;
@@ -55,6 +57,24 @@ export function TaskSheet({ visible, task, prefilledDate, onSave, onCancel, onDe
   const [recurrence, setRecurrence] = useState<RecurrenceType>('none');
   const [repeatDays, setRepeatDays] = useState<number[]>([]);
   const [early, setEarly] = useState(0);
+  const [place, setPlace] = useState<TaskPlace | undefined>();
+  const [locating, setLocating] = useState(false);
+  /** Uses where you are now (kept if you only switch arrive / leave), then asks for "Allow all the time". */
+  const pickPlace = async (on: TaskPlace['on']) => {
+    if (place) return setPlace({ ...place, on });
+    setLocating(true);
+    try {
+      const here = await captureHere();
+      setPlace({ ...here, on });
+      if (!(await askBackgroundLocation())) {
+        alert('Place saved. To remind you while the app is closed, set Remainder’s location permission to "Allow all the time".');
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Could not find your location.');
+    } finally {
+      setLocating(false);
+    }
+  };
   const [steps, setSteps] = useState<SubTask[]>([]);
   const [stepText, setStepText] = useState('');
   const addStep = () => {
@@ -80,6 +100,7 @@ export function TaskSheet({ visible, task, prefilledDate, onSave, onCancel, onDe
     setRepeatDays(task?.recurrence === 'days' ? task.repeatDays ?? [] : []);
     setEarly(task?.earlyMinutes ?? 0);
     setSteps(task?.subTasks ?? []);
+    setPlace(task?.place);
     setStepText('');
     setAlarm(task ? task.alarmEnabled !== false : false);
     if (!task) loadSettings().then((s) => setAlarm(s.defaultRing)); // new task: your default from Settings
@@ -115,6 +136,7 @@ export function TaskSheet({ visible, task, prefilledDate, onSave, onCancel, onDe
       recurrence,
       repeatDays: recurrence === 'days' ? repeatDays : undefined,
       earlyMinutes: early,
+      place,
       // A step typed but not yet added with enter still counts.
       subTasks: stepText.trim() ? [...steps, { id: Date.now().toString(36), text: stepText.trim(), completed: false }] : steps,
       enableAlarm: alarm,
@@ -155,6 +177,9 @@ export function TaskSheet({ visible, task, prefilledDate, onSave, onCancel, onDe
         <>
           {task && onDelete ? (
             <IconButton icon="trash-sharp" label={`Delete ${task.title}`} color={C.accentD} onPress={() => onDelete(task.id)} />
+          ) : null}
+          {task ? (
+            <IconButton icon="share-social-sharp" label={`Share ${task.title}`} onPress={() => Share.share({ message: shareTaskText(task) })} />
           ) : null}
           <Button label="Cancel" kind="secondary" style={styles.flex} onPress={onCancel} />
           <Button label={task ? 'Update' : 'Save'} arrow style={styles.flex} onPress={save} />
@@ -292,6 +317,20 @@ export function TaskSheet({ visible, task, prefilledDate, onSave, onCancel, onDe
         <Txt v="mono" style={styles.note}>
           {alarm ? '> Rings like an alarm until you dismiss or snooze it.' : '> A notification with Done / Snooze, repeated if you ignore it (change in Settings).'}
         </Txt>
+
+        {canUsePlaces ? (
+          <>
+            <FieldLabel>Also remind me at a place</FieldLabel>
+            <View style={styles.wrap}>
+              <Chip label="Off" active={!place} color={C.ink} onPress={() => setPlace(undefined)} />
+              <Chip label={locating ? 'Finding you…' : 'Arrive here'} active={place?.on === 'arrive'} color={C.teal} onPress={() => pickPlace('arrive')} />
+              <Chip label="Leave here" active={place?.on === 'leave'} color={C.teal} onPress={() => pickPlace('leave')} />
+            </View>
+            {place ? (
+              <Txt v="mono" style={styles.note}>{`> 📍 ${place.on === 'arrive' ? 'When you get to' : 'When you leave'} ${place.name} (within ${PLACE_RADIUS_M} m).`}</Txt>
+            ) : null}
+          </>
+        ) : null}
 
         <FieldLabel>Heads-up before</FieldLabel>
         <View style={styles.wrap}>

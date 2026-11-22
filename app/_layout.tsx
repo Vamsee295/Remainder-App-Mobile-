@@ -13,6 +13,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { LoadingScreen } from '@/components/loading-screen';
+import '@/services/geofence'; // defines the background place-reminder task before Android can call it
 import { C, isDark } from '@/constants/theme';
 import { TasksProvider } from '@/hooks/use-tasks';
 import { NotificationService } from '@/services/notification-service';

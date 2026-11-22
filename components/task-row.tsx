@@ -105,6 +105,7 @@ function RowCard({ task, onToggle, onEdit, onSnooze }: Props) {
           {task.priority && task.priority !== 'low' ? <Badge label={priority.label} color={C.ink} bg={C.paper2} /> : null}
           {task.alarmEnabled !== false && !task.completed ? <Badge label="⏰ Rings" color={C.paper} bg={C.accent} /> : null}
           {repeats ? <Badge label={`↻ ${repeatLabel(task, when)}`} color={C.teal} bg={C.tealLight} /> : null}
+          {task.place && !task.completed ? <Badge label={`📍 ${task.place.on === 'arrive' ? 'At' : 'Leaving'} ${task.place.name}`} color={C.teal} bg={C.tealLight} /> : null}
           {task.subTasks?.length ? (
             <Badge label={`☑ ${task.subTasks.filter((s) => s.completed).length}/${task.subTasks.length}`} color={C.ink} bg={C.paper2} />
           ) : null}

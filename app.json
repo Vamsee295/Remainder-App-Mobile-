@@ -41,6 +41,8 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      ["expo-location", { "isAndroidBackgroundLocationEnabled": true, "locationAlwaysAndWhenInUsePermission": "Remainder uses your location to remind you when you arrive at or leave a saved place." }],
+      ["expo-calendar", { "calendarPermission": "Remainder shows your calendar events next to your tasks." }],
       "expo-router",
       [
         "expo-splash-screen",

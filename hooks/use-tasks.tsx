@@ -6,6 +6,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { AppState, NativeModules, Platform } from 'react-native';
 
 import { AlarmService } from '@/services/alarm-service';
+import { syncGeofences } from '@/services/geofence';
 import { NotificationService } from '@/services/notification-service';
 import { RecurrenceService } from '@/services/recurrence-service';
 import { ruleFor, snap } from '@/services/repeat-rules';
@@ -72,6 +73,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
         repeatDays,
         earlyMinutes: data.earlyMinutes || undefined,
         subTasks: data.subTasks?.length ? data.subTasks : undefined,
+        place: data.place,
         alarmEnabled: data.enableAlarm !== false,
         deadlineDate: AlarmService.calculateDeadlineDate(createdAt, data.recurrence),
         isExpired: false,
@@ -220,6 +222,11 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
       .map((t) => ({ id: t.id, t: new Date(t.dateTime).getTime(), title: t.title }))
       .sort((a, b) => a.t - b.t);
     NativeModules.AlarmModule.updateWidget(JSON.stringify(items));
+  }, [tasks]);
+
+  // Place reminders: keep the phone watching exactly the open tasks that have a place.
+  useEffect(() => {
+    syncGeofences(tasks);
   }, [tasks]);
 
   useEffect(() => {

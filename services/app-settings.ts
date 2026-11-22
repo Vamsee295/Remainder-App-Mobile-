@@ -7,9 +7,10 @@ export type AppSettings = {
   snooze: number; // minutes
   followUps: number; // "still to do" notifications after a Notify reminder, 5 min apart
   ringMinutes: number; // how long an alarm rings before it stops
+  showCalendar: boolean; // show the phone's calendar events in the Calendar tab
 };
 
-export const DEFAULT_SETTINGS: AppSettings = { defaultRing: false, snooze: 10, followUps: 2, ringMinutes: 2 };
+export const DEFAULT_SETTINGS: AppSettings = { defaultRing: false, snooze: 10, followUps: 2, ringMinutes: 2, showCalendar: false };
 const KEY = '@remainder_settings';
 
 export async function loadSettings(): Promise<AppSettings> {

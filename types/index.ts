@@ -29,6 +29,14 @@ export interface Task {
   alarmSnoozedCount?: number; // Track how many times alarm was snoozed
   alarmEnabled?: boolean; // false = quiet notification only, no ringing alarm (default true)
   earlyMinutes?: number; // heads-up this many minutes before each reminder (0 / undefined = none)
+  place?: TaskPlace; // also remind when arriving at / leaving this place
+}
+
+export interface TaskPlace {
+  name: string;
+  lat: number;
+  lng: number;
+  on: 'arrive' | 'leave';
 }
 
 export interface TaskFormData {
@@ -43,6 +51,7 @@ export interface TaskFormData {
   repeatDays?: number[];
   earlyMinutes?: number;
   subTasks?: SubTask[];
+  place?: TaskPlace;
   enableAlarm?: boolean; // Toggle to enable/disable alarm functionality
 }
 
