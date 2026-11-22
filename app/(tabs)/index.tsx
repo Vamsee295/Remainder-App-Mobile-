@@ -1,562 +1,195 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  StatusBar,
-  TouchableOpacity,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import * as Notifications from 'expo-notifications';
-import { Task, TaskFilter, TaskFormData, TaskCategory, TaskPriority } from '@/types';
-import { StorageService } from '@/services/storage-service';
-import { NotificationService } from '@/services/notification-service';
-import { RecurrenceService } from '@/services/recurrence-service';
-import { AlarmService } from '@/services/alarm-service';
-import { TaskList } from '@/components/task-list';
-import { AddTaskModal } from '@/components/add-task-modal';
-import { FloatingActionButton } from '@/components/floating-action-button';
-import { FilterDropdown } from '@/components/filter-dropdown';
-import { Colors } from '@/constants/theme';
+import { router } from 'expo-router';
+import React, { useState } from 'react';
+import { Pressable, RefreshControl, ScrollView, SectionList, StyleSheet, View } from 'react-native';
+
+import { Card, Chip, Empty, Fab, IconButton, PromptInput, Screen, ScreenHeader, SectionHeader, Segmented, Stamp, Txt } from '@/components/kit';
+import { TaskRow } from '@/components/task-row';
+import { TaskSheet } from '@/components/task-sheet';
+import { CATEGORIES } from '@/constants/categories';
+import { C } from '@/constants/theme';
+import { useHealth } from '@/hooks/use-health';
+import { useTasks } from '@/hooks/use-tasks';
+import { parseQuickAdd } from '@/services/quick-add';
+import { Task, TaskCategory, TaskFilter } from '@/types';
+
+const FILTERS: { value: TaskFilter; label: string }[] = [
+  { value: 'active', label: 'Active' },
+  { value: 'completed', label: 'Done' },
+  { value: 'all', label: 'All' },
+];
+
+const EMPTY: Record<TaskFilter, { title: string; hint: string }> = {
+  active: { title: 'Nothing queued', hint: 'type a task above, or tap +' },
+  completed: { title: 'Nothing done yet', hint: 'finished tasks land here' },
+  all: { title: 'No tasks yet', hint: 'type a task above, or tap +' },
+};
+
+/** Split tasks into Late / Today / Tomorrow / This week / Later, each sorted by time. */
+function groupByDay(tasks: Task[]) {
+  const day0 = new Date();
+  day0.setHours(0, 0, 0, 0);
+  const dayAt = (n: number) => new Date(day0.getFullYear(), day0.getMonth(), day0.getDate() + n).getTime();
+  const now = Date.now();
+
+  const groups: Record<string, Task[]> = { Late: [], Today: [], Tomorrow: [], 'This week': [], Later: [] };
+  for (const task of [...tasks].sort((a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime())) {
+    const t = new Date(task.dateTime).getTime();
+    if (t < now && !task.completed) groups.Late.push(task);
+    else if (t < dayAt(1)) groups.Today.push(task);
+    else if (t < dayAt(2)) groups.Tomorrow.push(task);
+    else if (t < dayAt(7)) groups['This week'].push(task);
+    else groups.Later.push(task);
+  }
+  return Object.entries(groups)
+    .filter(([, data]) => data.length)
+    .map(([title, data]) => ({ title, data }));
+}
 
 export default function TasksScreen() {
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const { tasks, reload, saveTask, toggleTask, deleteTask, snoozeTask } = useTasks();
   const [filter, setFilter] = useState<TaskFilter>('active');
-  const [selectedCategory, setSelectedCategory] = useState<TaskCategory | 'all'>('all');
-  const [selectedPriority, setSelectedPriority] = useState<TaskPriority | 'all'>('all');
-  const [modalVisible, setModalVisible] = useState(false);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [category, setCategory] = useState<TaskCategory | 'all'>('all');
+  const [quick, setQuick] = useState('');
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [editing, setEditing] = useState<Task | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const { problems } = useHealth();
 
-  // Load tasks on mount
-  useEffect(() => {
-    loadTasks();
-    requestNotificationPermissions();
-    setupNotificationListeners();
-  }, []);
+  const active = tasks.filter((t) => !t.completed);
+  const dueToday = active.filter((t) => new Date(t.dateTime).toDateString() === new Date().toDateString()).length;
 
-  // Periodic check for expired alarms (every 5 minutes)
-  useEffect(() => {
-    const checkExpiredAlarms = async () => {
-      try {
-        const currentTasks = await StorageService.loadTasks();
-        const expiredTasks = AlarmService.getExpiredTasks(currentTasks);
+  const shown = tasks
+    .filter((t) => (filter === 'all' ? true : filter === 'active' ? !t.completed : t.completed))
+    .filter((t) => category === 'all' || (t.category ?? 'other') === category);
+  const sections = groupByDay(shown);
 
-        if (expiredTasks.length > 0) {
-          const expiredIds = expiredTasks.map(t => t.id);
-          await StorageService.updateExpiredTasks(expiredIds);
-          // Reload tasks to reflect changes
-          await loadTasks();
-          console.log(`Marked ${expiredTasks.length} task(s) as expired`);
+  const submitQuick = () => {
+    const { title, when, daily } = parseQuickAdd(quick);
+    if (!title) return;
+    saveTask({ title, date: when, time: when, category: 'other', priority: 'low', recurrence: daily ? 'daily' : 'none', enableAlarm: false });
+    setQuick('');
+  };
+
+  const header = (
+    <View>
+      <ScreenHeader
+        eyebrow="Remainder / Tasks"
+        hand={dueToday ? `hi — ${dueToday} ${dueToday === 1 ? 'thing' : 'things'} due today` : 'hi — nothing due today'}
+        title="Get it"
+        mark="Done."
+        right={
+          <View style={styles.headRight}>
+            {active.length ? <Stamp label={`${active.length} open`} /> : null}
+            <IconButton icon="settings-sharp" label="Phone setup and backup" onPress={() => router.push('/settings')} />
+          </View>
         }
-      } catch (error) {
-        console.error('Error checking expired alarms:', error);
-      }
-    };
+      />
 
-    // Check immediately on mount
-    checkExpiredAlarms();
+      {problems.length ? (
+        <Pressable onPress={() => router.push('/settings')} accessibilityRole="button" accessibilityLabel="Reminders may not ring. Open phone setup.">
+          <Card style={styles.warn}>
+            <Txt v="cond" color={C.paper}>! Reminders may not ring</Txt>
+            <Txt v="mono" color={C.paper} style={styles.warnText}>
+              {`> ${problems.length} phone setting${problems.length > 1 ? 's' : ''} to fix. Tap to open setup.`}
+            </Txt>
+          </Card>
+        </Pressable>
+      ) : null}
 
-    // Check every 5 minutes
-    const interval = setInterval(checkExpiredAlarms, 5 * 60 * 1000);
+      <PromptInput
+        value={quick}
+        onChangeText={setQuick}
+        onSubmitEditing={submitQuick}
+        placeholder="call mom at 6pm"
+        returnKeyType="done"
+        accessibilityLabel="Quick add a task. Type a title and a time, then press enter."
+      />
 
-    return () => clearInterval(interval);
-  }, []);
-
-  const requestNotificationPermissions = async () => {
-    const granted = await NotificationService.requestPermissions();
-    if (!granted) {
-      console.warn('Notification permissions not granted');
-    }
-  };
-
-  const setupNotificationListeners = () => {
-    return NotificationService.setupNotificationListeners(
-      (notification) => {
-        console.log('Received notification:', notification);
-
-        // Auto-snooze logic: if task is still incomplete after 30 seconds, snooze it
-        const taskId = notification.request.content.data?.taskId as string;
-        if (taskId) {
-          setTimeout(async () => {
-            // Reload tasks to get latest state
-            const currentTasks = await StorageService.loadTasks();
-            const task = currentTasks.find(t => t.id === taskId);
-
-            // If task exists and is not completed, auto-snooze it
-            if (task && !task.completed) {
-              console.log('Auto-snoozing task:', task.title);
-              handleSnoozeTask(taskId);
-            }
-          }, 30000); // 30 seconds delay
-        }
-      },
-      (response) => {
-        console.log('User tapped notification:', response);
-        // Optionally navigate to specific task or highlight it
-      }
-    );
-  };
-
-  const loadTasks = async () => {
-    try {
-      const loadedTasks = await StorageService.loadTasks();
-      setTasks(loadedTasks);
-    } catch (error) {
-      console.error('Error loading tasks:', error);
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const handleRefresh = useCallback(() => {
-    setRefreshing(true);
-    loadTasks();
-  }, []);
-
-  const handleAddTask = () => {
-    setEditingTask(null);
-    setModalVisible(true);
-  };
-
-  const handleEditTask = (task: Task) => {
-    setEditingTask(task);
-    setModalVisible(true);
-  };
-
-  const handleSaveTask = async (taskData: TaskFormData) => {
-    try {
-      // Combine date and time
-      const combinedDateTime = new Date(taskData.date);
-      combinedDateTime.setHours(taskData.time.getHours());
-      combinedDateTime.setMinutes(taskData.time.getMinutes());
-
-      if (editingTask) {
-        // Update existing task
-        // Calculate deadline based on recurrence type
-        const deadlineDate = AlarmService.calculateDeadlineDate(
-          editingTask.createdAt,
-          taskData.recurrence
-        );
-
-        const updatedTask: Task = {
-          ...editingTask,
-          title: taskData.title,
-          description: taskData.description,
-          dateTime: combinedDateTime.toISOString(),
-          category: taskData.category,
-          priority: taskData.priority,
-          recurrence: taskData.recurrence,
-          recurrenceInterval: taskData.recurrenceInterval,
-          deadlineDate: deadlineDate,
-          isExpired: false, // Reset expired status when editing
-          alarmSnoozedCount: 0, // Reset snooze count when editing
-        };
-
-        // Cancel old notifications
-        if (editingTask.notificationIds) {
-          await NotificationService.cancelMultipleNotifications(editingTask.notificationIds);
-        }
-
-        // Schedule new notifications (3 total)
-        const notificationIds = await NotificationService.scheduleNotification(updatedTask);
-        if (notificationIds) {
-          updatedTask.notificationIds = notificationIds;
-        }
-
-        await StorageService.updateTask(updatedTask);
-        setTasks(prevTasks =>
-          prevTasks.map(t => (t.id === updatedTask.id ? updatedTask : t))
-        );
-      } else {
-        // Create new task
-        const createdAt = new Date().toISOString();
-
-        // Calculate deadline based on recurrence type
-        const deadlineDate = AlarmService.calculateDeadlineDate(
-          createdAt,
-          taskData.recurrence
-        );
-
-        const newTask: Task = {
-          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-          title: taskData.title,
-          description: taskData.description,
-          dateTime: combinedDateTime.toISOString(),
-          completed: false,
-          createdAt: createdAt,
-          category: taskData.category,
-          priority: taskData.priority,
-          recurrence: taskData.recurrence,
-          recurrenceInterval: taskData.recurrenceInterval,
-          deadlineDate: deadlineDate,
-          isExpired: false,
-          alarmSnoozedCount: 0,
-        };
-
-        // Schedule notifications (3 total)
-        const notificationIds = await NotificationService.scheduleNotification(newTask);
-        if (notificationIds) {
-          newTask.notificationIds = notificationIds;
-        }
-
-        await StorageService.addTask(newTask);
-
-        // Save task as a suggestion for future use
-        console.log('Saving task as suggestion:', newTask);
-        await StorageService.addTaskSuggestion(newTask);
-        console.log('Task suggestion saved successfully');
-
-        setTasks(prevTasks => [...prevTasks, newTask]);
-      }
-
-      setModalVisible(false);
-      setEditingTask(null);
-    } catch (error) {
-      console.error('Error saving task:', error);
-    }
-  };
-
-  const handleToggleComplete = async (taskId: string) => {
-    try {
-      const task = tasks.find(t => t.id === taskId);
-      if (!task) return;
-
-      const updatedTask: Task = {
-        ...task,
-        completed: !task.completed,
-      };
-
-      // Cancel notifications if completing task
-      if (updatedTask.completed && task.notificationIds) {
-        await NotificationService.cancelMultipleNotifications(task.notificationIds);
-
-        // If task is recurring and being completed, create next occurrence
-        if (RecurrenceService.isRecurringTask(task)) {
-          const nextTask = RecurrenceService.createNextOccurrence(task);
-          if (nextTask) {
-            // Schedule notifications for the next occurrence
-            const notificationIds = await NotificationService.scheduleNotification(nextTask);
-            if (notificationIds) {
-              nextTask.notificationIds = notificationIds;
-            }
-
-            // Save the next occurrence
-            await StorageService.addTask(nextTask);
-            setTasks(prevTasks => [...prevTasks, nextTask]);
-          }
-        }
-      }
-      // Reschedule notifications if uncompleting task
-      else if (!updatedTask.completed) {
-        const notificationIds = await NotificationService.scheduleNotification(updatedTask);
-        if (notificationIds) {
-          updatedTask.notificationIds = notificationIds;
-        }
-      }
-
-      await StorageService.updateTask(updatedTask);
-      setTasks(prevTasks =>
-        prevTasks.map(t => (t.id === taskId ? updatedTask : t))
-      );
-    } catch (error) {
-      console.error('Error toggling task completion:', error);
-    }
-  };
-
-  const handleDeleteTask = async (taskId: string) => {
-    try {
-      const task = tasks.find(t => t.id === taskId);
-      if (!task) return;
-
-      // Cancel notifications
-      if (task.notificationIds) {
-        await NotificationService.cancelMultipleNotifications(task.notificationIds);
-      }
-
-      await StorageService.deleteTask(taskId);
-      setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
-    } catch (error) {
-      console.error('Error deleting task:', error);
-    }
-  };
-
-  const handleSnoozeTask = async (taskId: string, snoozeMinutes: number = 5) => {
-    try {
-      const task = tasks.find(t => t.id === taskId);
-      if (!task) return;
-
-      const now = new Date();
-      const snoozeTime = new Date(now.getTime() + snoozeMinutes * 60000);
-
-      const updatedTask: Task = {
-        ...task,
-        dateTime: snoozeTime.toISOString(),
-        alarmSnoozedCount: (task.alarmSnoozedCount || 0) + 1,
-      };
-
-      // Cancel old notifications
-      if (task.notificationIds) {
-        await NotificationService.cancelMultipleNotifications(task.notificationIds);
-      }
-
-      // Schedule new notifications
-      const notificationIds = await NotificationService.scheduleNotification(updatedTask);
-      if (notificationIds) {
-        updatedTask.notificationIds = notificationIds;
-      }
-
-      await StorageService.updateTask(updatedTask);
-      setTasks(prevTasks =>
-        prevTasks.map(t => (t.id === taskId ? updatedTask : t))
-      );
-
-      console.log(`Task snoozed for ${snoozeMinutes} minutes (snooze count: ${updatedTask.alarmSnoozedCount})`);
-    } catch (error) {
-      console.error('Error snoozing task:', error);
-    }
-  };
-
-  const handleTestAlarm = async () => {
-    try {
-      const hasPermission = await NotificationService.requestPermissions();
-
-      if (!hasPermission) {
-        alert('Please enable notification permissions to test alarms');
-        return;
-      }
-
-      // Trigger an immediate notification
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: '🔔 Test Alarm',
-          body: 'This is your test alarm! If you hear sound, notifications are working.',
-          sound: true,
-          priority: Notifications.AndroidNotificationPriority.MAX,
-          vibrate: [0, 250, 250, 250],
-        },
-        trigger: null, // null trigger = immediate notification
-      });
-
-      console.log('Test alarm notification sent!');
-    } catch (error) {
-      console.error('Error testing alarm:', error);
-      alert('Error sending test notification: ' + error);
-    }
-  };
-
-  // Apply category and priority filters
-  const getFilteredAndSortedTasks = (): Task[] => {
-    let filtered = [...tasks];
-
-    // Filter by category
-    if (selectedCategory !== 'all') {
-      filtered = filtered.filter(t => t.category === selectedCategory);
-    }
-
-    // Sort by priority
-    if (selectedPriority !== 'all') {
-      const priorityOrder = { high: 0, medium: 1, low: 2 };
-      filtered = filtered.sort((a, b) => {
-        const aPriority = a.priority || 'low';
-        const bPriority = b.priority || 'low';
-
-        if (selectedPriority === aPriority && selectedPriority !== bPriority) {
-          return -1;
-        }
-        if (selectedPriority === bPriority && selectedPriority !== aPriority) {
-          return 1;
-        }
-
-        return priorityOrder[aPriority] - priorityOrder[bPriority];
-      });
-    }
-
-    return filtered;
-  };
-
-  const filteredTasks = getFilteredAndSortedTasks();
-  const activeTasks = filteredTasks.filter(t => !t.completed).length;
-  const completedTasks = filteredTasks.filter(t => t.completed).length;
+      <Segmented options={FILTERS} value={filter} onChange={setFilter} />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.bleed} contentContainerStyle={styles.categories}>
+        <Chip label="All types" active={category === 'all'} color={C.ink} onPress={() => setCategory('all')} />
+        {CATEGORIES.map((c) => (
+          <Chip key={c.value} label={c.label} active={category === c.value} color={C.ink} onPress={() => setCategory(c.value)} />
+        ))}
+      </ScrollView>
+    </View>
+  );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
+    <Screen>
+      <SectionList
+        sections={sections}
+        keyExtractor={(item) => item.id}
+        ListHeaderComponent={header}
+        ListEmptyComponent={
+          category !== 'all' && tasks.length ? (
+            <Empty title={`Nothing in ${CATEGORIES.find((c) => c.value === category)?.label}`} hint="pick another type, or All types" />
+          ) : (
+            <Empty {...EMPTY[filter]} />
+          )
+        }
+        renderSectionHeader={({ section }) => (
+          <SectionHeader title={section.title} count={section.data.length} />
+        )}
+        renderItem={({ item }) => (
+          <TaskRow
+            task={item}
+            onToggle={toggleTask}
+            onSnooze={snoozeTask}
+            onEdit={(task) => {
+              setEditing(task);
+              setSheetOpen(true);
+            }}
+          />
+        )}
+        contentContainerStyle={styles.list}
+        stickySectionHeadersEnabled={false}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            tintColor={C.accent}
+            colors={[C.accent]}
+            onRefresh={async () => {
+              setRefreshing(true);
+              await reload();
+              setRefreshing(false);
+            }}
+          />
+        }
+      />
 
-      <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerTop}>
-            <View style={styles.headerContent}>
-              <Ionicons name="list" size={32} color={Colors.primary} />
-              <View style={styles.headerText}>
-                <Text style={styles.headerTitle}>My Tasks</Text>
-                <Text style={styles.headerSubtitle}>
-                  {activeTasks} active • {completedTasks} completed
-                </Text>
-              </View>
-            </View>
-            <FilterDropdown
-              selectedCategory={selectedCategory}
-              selectedPriority={selectedPriority}
-              onCategoryChange={setSelectedCategory}
-              onPriorityChange={setSelectedPriority}
-            />
-          </View>
-        </View>
+      <Fab
+        label="New task"
+        onPress={() => {
+          setEditing(null);
+          setSheetOpen(true);
+        }}
+      />
 
-        {/* Test Alarm Button */}
-        <TouchableOpacity
-          style={styles.testAlarmButton}
-          onPress={handleTestAlarm}
-        >
-          <Ionicons name="notifications" size={20} color="#FFFFFF" />
-          <Text style={styles.testAlarmButtonText}>Test Alarm Sound 🔔</Text>
-        </TouchableOpacity>
-
-        {/* Filter Tabs */}
-        <View style={styles.filterContainer}>
-          <TouchableOpacity
-            style={[styles.filterTab, filter === 'active' && styles.filterTabActive]}
-            onPress={() => setFilter('active')}
-          >
-            <Text style={[styles.filterText, filter === 'active' && styles.filterTextActive]}>
-              Active
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.filterTab, filter === 'completed' && styles.filterTabActive]}
-            onPress={() => setFilter('completed')}
-          >
-            <Text style={[styles.filterText, filter === 'completed' && styles.filterTextActive]}>
-              Completed
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.filterTab, filter === 'all' && styles.filterTabActive]}
-            onPress={() => setFilter('all')}
-          >
-            <Text style={[styles.filterText, filter === 'all' && styles.filterTextActive]}>
-              All
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Task List */}
-        <TaskList
-          tasks={filteredTasks}
-          filter={filter}
-          onToggleComplete={handleToggleComplete}
-          onDelete={handleDeleteTask}
-          onEdit={handleEditTask}
-          onSnooze={handleSnoozeTask}
-          onRefresh={handleRefresh}
-          refreshing={refreshing}
-        />
-
-        {/* FAB */}
-        <FloatingActionButton onPress={handleAddTask} />
-
-        {/* Add/Edit Task Modal */}
-        <AddTaskModal
-          visible={modalVisible}
-          task={editingTask}
-          onSave={handleSaveTask}
-          onCancel={() => {
-            setModalVisible(false);
-            setEditingTask(null);
-          }}
-        />
-      </View>
-    </SafeAreaView>
+      <TaskSheet
+        visible={sheetOpen}
+        task={editing}
+        onCancel={() => setSheetOpen(false)}
+        onDelete={(id) => {
+          deleteTask(id);
+          setSheetOpen(false);
+        }}
+        onSave={(data) => {
+          saveTask(data, editing);
+          setSheetOpen(false);
+        }}
+      />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 48,
-    paddingBottom: 12,
-    gap: 12,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  headerText: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: Colors.text,
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    fontWeight: '600',
-  },
-  filterContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 8,
-  },
-  filterTab: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: Colors.surfaceVariant,
-  },
-  filterTabActive: {
-    backgroundColor: Colors.primary,
-  },
-  filterText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-  },
-  filterTextActive: {
-    color: Colors.background,
-  },
-  testAlarmButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FF6B6B',
-    marginHorizontal: 16,
-    marginBottom: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    gap: 8,
-    shadowColor: '#FF6B6B',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  testAlarmButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
+  list: { padding: 20, paddingRight: 26, paddingBottom: 120 },
+  bleed: { marginLeft: -20, marginRight: -26 },
+  headRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  warn: { backgroundColor: C.accentD, padding: 14, marginBottom: 16, gap: 4 },
+  warnText: { fontSize: 12 },
+  categories: { gap: 8, paddingTop: 12, paddingBottom: 6, paddingHorizontal: 20 },
 });

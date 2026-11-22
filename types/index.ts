@@ -1,6 +1,7 @@
 export type TaskCategory = 'work' | 'personal' | 'health' | 'shopping' | 'other';
 export type TaskPriority = 'high' | 'medium' | 'low';
-export type RecurrenceType = 'none' | 'daily' | 'weekly' | 'monthly';
+// 'weekly' / 'monthly' are legacy names for "daily for 7 / 30 days". Rules live in services/repeat-rules.ts.
+export type RecurrenceType = 'none' | 'daily' | 'weekdays' | 'days' | 'monthDay' | 'weekly' | 'monthly';
 
 export interface SubTask {
   id: string;
@@ -21,10 +22,13 @@ export interface Task {
   recurrence?: RecurrenceType;
   recurrenceInterval?: number; // e.g., every 2 days, every 3 weeks
   recurrenceParentId?: string; // Links to original recurring task
+  repeatDays?: number[]; // 'days': picked weekdays (0 = Sun); 'monthDay': [day of month]
   subTasks?: SubTask[]; // Array of sub-tasks/checklist items
   deadlineDate?: string | null; // null for Daily mode, ISO date for Weekly/Monthly
   isExpired?: boolean; // Track if alarm deadline has passed
   alarmSnoozedCount?: number; // Track how many times alarm was snoozed
+  alarmEnabled?: boolean; // false = quiet notification only, no ringing alarm (default true)
+  earlyMinutes?: number; // heads-up this many minutes before each reminder (0 / undefined = none)
 }
 
 export interface TaskFormData {
@@ -36,6 +40,8 @@ export interface TaskFormData {
   priority?: TaskPriority;
   recurrence?: RecurrenceType;
   recurrenceInterval?: number;
+  repeatDays?: number[];
+  earlyMinutes?: number;
   enableAlarm?: boolean; // Toggle to enable/disable alarm functionality
 }
 

@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform, NativeModules } from 'react-native';
 import { Task } from '@/types';
 import { AlarmService } from './alarm-service';
+import { ruleFor, step, toNative } from './repeat-rules';
 
 // Get native alarm module (Android only)
 const { AlarmModule } = NativeModules;
@@ -88,29 +89,29 @@ export class NotificationService {
                 return null;
             }
 
-            // **USE NATIVE ALARM MODULE ON ANDROID**
+            // Android: our native scheduler handles both modes. Ring = full-screen ringing alarm,
+            // Notify = normal notification. Both get Done / Snooze buttons that work with the app closed
+            // (applied by applyNativeEvents in use-tasks), plus daily repeats and reboot restore.
             if (Platform.OS === 'android' && AlarmModule) {
                 try {
-                    console.log('Using native AlarmModule for Android');
-
-                    // Get custom sound URI from storage if available
                     const { StorageService } = require('./storage-service');
                     const soundUri = await StorageService.loadSelectedAlarmSound();
+                    const repeat = toNative(ruleFor(task.recurrence, task.repeatDays, taskDate));
 
-                    // Schedule native alarm
                     await AlarmModule.setAlarm(
                         task.id,
                         taskDate.getTime(),
                         soundUri && soundUri.startsWith('content://') ? soundUri : 'default',
                         task.title,
-                        task.description || 'Your reminder is due'
+                        task.description || '',
+                        repeat, // "" | "daily" | "days:1,3,5" | "monthly:15"; 7 / 30-day repeats also stop at the deadline
+                        task.deadlineDate ? new Date(task.deadlineDate).getTime() : 0,
+                        task.alarmEnabled !== false ? 'ring' : 'notify',
+                        (task.earlyMinutes || 0) * 60000
                     );
-
-                    console.log(`Native alarm scheduled for: ${taskDate.toLocaleString()}`);
-                    return [task.id]; // Return task ID as alarm ID
+                    return [task.id];
                 } catch (error) {
-                    console.error('Error using native alarm, falling back to notifications:', error);
-                    // Fall through to use expo-notifications as backup
+                    console.error('Native alarm failed, falling back to a notification:', error);
                 }
             }
 
@@ -124,25 +125,32 @@ export class NotificationService {
                 notificationBody += ` • ${deadlineInfo}`;
             }
 
-            // Schedule main notification
-            const mainId = await Notifications.scheduleNotificationAsync({
-                content: {
-                    title: `🔔 ${task.title}`,
-                    body: notificationBody,
-                    data: {
-                        taskId: task.id,
-                        isAlarm: true,
-                        hasDeadline: Boolean(task.deadlineDate),
+            // Main notification, once per day for repeating tasks (up to the deadline).
+            // ponytail: "Daily" is scheduled 14 days ahead and topped up when the app opens (rollRepeats in use-tasks).
+            const rule = ruleFor(task.recurrence, task.repeatDays, taskDate);
+            const count = rule.kind === 'none' ? 1 : task.recurrence === 'weekly' ? 7 : task.recurrence === 'monthly' ? 30 : 14;
+            const until = task.deadlineDate ? new Date(task.deadlineDate).getTime() : Infinity;
+            for (let i = 0, date = taskDate; i < count; i++, date = step(date, rule)) {
+                if (date.getTime() > until) break;
+                const heads = task.earlyMinutes ? new Date(date.getTime() - task.earlyMinutes * 60000) : null;
+                if (heads && heads > now) {
+                    notificationIds.push(await Notifications.scheduleNotificationAsync({
+                        content: { title: `Coming up: ${task.title}`, body: 'Heads-up from Remainder', data: { taskId: task.id } },
+                        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: heads },
+                    }));
+                }
+                const id = await Notifications.scheduleNotificationAsync({
+                    content: {
+                        title: `🔔 ${task.title}`,
+                        body: notificationBody,
+                        data: { taskId: task.id, isAlarm: true, hasDeadline: Boolean(task.deadlineDate) },
+                        sound: true,
+                        priority: Notifications.AndroidNotificationPriority.MAX,
                     },
-                    sound: true,
-                    priority: Notifications.AndroidNotificationPriority.MAX,
-                },
-                trigger: {
-                    type: Notifications.SchedulableTriggerInputTypes.DATE,
-                    date: taskDate,
-                },
-            });
-            notificationIds.push(mainId);
+                    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date },
+                });
+                notificationIds.push(id);
+            }
 
             // Schedule 1st auto-snooze (+5 minutes)
             const snooze1Date = new Date(taskDate.getTime() + 5 * 60000);
@@ -178,12 +186,44 @@ export class NotificationService {
             });
             notificationIds.push(snooze2Id);
 
-            console.log(`Scheduled 3 notifications for task: ${task.title}`);
+            console.log(`Scheduled ${notificationIds.length} notifications for task: ${task.title}`);
             return notificationIds;
         } catch (error) {
             console.error('Error scheduling notification:', error);
             return null;
         }
+    }
+
+    /** Done / Snooze taps made from notifications or the alarm screen since the last call (Android only). */
+    static async consumeNativeEvents(): Promise<{ id: string; type: 'done' | 'snooze'; time: number }[]> {
+        if (Platform.OS !== 'android' || !AlarmModule?.consumeEvents) return [];
+        try {
+            return JSON.parse(await AlarmModule.consumeEvents());
+        } catch {
+            return [];
+        }
+    }
+
+    /** True when this device can ring real alarms (Android build with the native module). */
+    static canRing(): boolean {
+        return Platform.OS === 'android' && Boolean(AlarmModule);
+    }
+
+    /** Ring a test alarm a few seconds from now, to check sound and the full-screen alarm. */
+    static async ringTestAlarm(seconds = 10): Promise<void> {
+        const { StorageService } = require('./storage-service');
+        const soundUri = await StorageService.loadSelectedAlarmSound();
+        await AlarmModule.setAlarm(
+            'test-alarm',
+            Date.now() + seconds * 1000,
+            soundUri && soundUri.startsWith('content://') ? soundUri : 'default',
+            'Test alarm',
+            'If you can hear this, alarms work.',
+            '',
+            0,
+            'ring',
+            0
+        );
     }
 
     /**
@@ -204,7 +244,13 @@ export class NotificationService {
     static async cancelMultipleNotifications(notificationIds: string[]): Promise<void> {
         try {
             await Promise.all(
-                notificationIds.map(id => Notifications.cancelScheduledNotificationAsync(id))
+                notificationIds.map(async id => {
+                    // An id can be a native alarm (the task id) or an expo notification id: cancel both ways.
+                    if (Platform.OS === 'android' && AlarmModule) {
+                        await AlarmModule.cancelAlarm(id).catch(() => {});
+                    }
+                    await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
+                })
             );
             console.log(`Cancelled ${notificationIds.length} notifications`);
         } catch (error) {

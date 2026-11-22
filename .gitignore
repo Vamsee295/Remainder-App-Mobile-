@@ -40,4 +40,4 @@ app-example
 
 # generated native folders
 /ios
-/android
+# android/ holds the custom alarm code (AlarmService etc.), so it is tracked.
