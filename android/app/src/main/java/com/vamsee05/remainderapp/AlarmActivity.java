@@ -114,10 +114,12 @@ public class AlarmActivity extends AppCompatActivity {
 
         LinearLayout snoozeRow = new LinearLayout(this);
         snoozeRow.setOrientation(LinearLayout.HORIZONTAL);
-        TextView snooze5 = button("SNOOZE 5", CARD, INK);
-        snooze5.setOnClickListener(v -> sendToService(AlarmService.ACTION_SNOOZE, 5));
-        TextView snooze10 = button("SNOOZE 10", CARD, INK);
-        snooze10.setOnClickListener(v -> sendToService(AlarmService.ACTION_SNOOZE, 10));
+        // Your snooze length from Settings, and double it.
+        int snooze = AppSettings.snoozeMinutes(this);
+        TextView snooze5 = button("SNOOZE " + snooze, CARD, INK);
+        snooze5.setOnClickListener(v -> sendToService(AlarmService.ACTION_SNOOZE, snooze));
+        TextView snooze10 = button("SNOOZE " + snooze * 2, CARD, INK);
+        snooze10.setOnClickListener(v -> sendToService(AlarmService.ACTION_SNOOZE, snooze * 2));
         LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         left.rightMargin = dp(7);
         LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);

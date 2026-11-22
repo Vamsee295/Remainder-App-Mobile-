@@ -9,10 +9,11 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { LoadingScreen } from '@/components/loading-screen';
-import { C } from '@/constants/theme';
+import { C, isDark } from '@/constants/theme';
 import { TasksProvider } from '@/hooks/use-tasks';
 import { NotificationService } from '@/services/notification-service';
 
@@ -53,12 +54,15 @@ export default function RootLayout() {
   if (!loaded && !error) return null;
 
   return (
+    // Swipe gestures (task rows) need a gesture root.
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <ThemeProvider value={theme}>
       <TasksProvider>
         <Stack screenOptions={{ headerShown: false }} />
       </TasksProvider>
       {intro ? <LoadingScreen onDone={endIntro} /> : null}
-      <StatusBar style="dark" />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
     </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }

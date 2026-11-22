@@ -18,7 +18,7 @@ function deadlineBadge(deadline: string) {
   const days = Math.floor((new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() - today.getTime()) / 86400000);
   if (days < 0) return <Badge label="Overdue" color={C.paper} bg={C.accentD} />;
   if (days === 0) return <Badge label="Today" />;
-  if (days === 1) return <Badge label="Tomorrow" color={C.teal} bg="#cfe6df" />;
+  if (days === 1) return <Badge label="Tomorrow" color={C.teal} bg={C.tealLight} />;
   return <Badge label={d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} color={C.ink} bg={C.paper2} />;
 }
 

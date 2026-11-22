@@ -23,7 +23,7 @@ import androidx.core.app.NotificationCompat;
 
 /**
  * Rings the alarm: loops the sound on the alarm volume and vibrates until the
- * user dismisses or snoozes it, or until RING_TIMEOUT_MS passes.
+ * user dismisses or snoozes it, or until the ring time from Settings passes.
  */
 public class AlarmService extends Service {
     private static final String TAG = "AlarmService";
@@ -37,7 +37,6 @@ public class AlarmService extends Service {
     private static final String CHANNEL_ID = "ALARM_RINGING";
     private static final String MISSED_CHANNEL_ID = "ALARM_MISSED";
     private static final int NOTIFICATION_ID = 1001;
-    private static final long RING_TIMEOUT_MS = 2 * 60 * 1000;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable timeout = this::onTimeout;
@@ -69,9 +68,9 @@ public class AlarmService extends Service {
             startForeground(NOTIFICATION_ID, buildRingingNotification());
             playSound();
             startVibration();
-            handler.postDelayed(timeout, RING_TIMEOUT_MS);
+            handler.postDelayed(timeout, AppSettings.ringMs(this));
         } else if (ACTION_SNOOZE.equals(action) && alarmId != null) {
-            AlarmActions.snooze(this, alarmId, intent.getIntExtra("minutes", 5), soundUri, title, description, "ring");
+            AlarmActions.snooze(this, alarmId, intent.getIntExtra("minutes", AppSettings.snoozeMinutes(this)), soundUri, title, description, "ring");
             finishAlarm();
         } else if (ACTION_DONE.equals(action) && alarmId != null) {
             AlarmActions.done(this, alarmId); // the app ticks the task off next time it opens
@@ -182,7 +181,7 @@ public class AlarmService extends Service {
             .setContentIntent(fullScreenIntent)
             .setFullScreenIntent(fullScreenIntent, true)
             .addAction(0, "Done", serviceIntent(ACTION_DONE, 5))
-            .addAction(0, "Snooze 5 min", serviceIntent(ACTION_SNOOZE, 2))
+            .addAction(0, "Snooze " + AppSettings.snoozeMinutes(this) + " min", serviceIntent(ACTION_SNOOZE, 2))
             .addAction(0, "Dismiss", serviceIntent(ACTION_DISMISS, 3))
             .build();
     }

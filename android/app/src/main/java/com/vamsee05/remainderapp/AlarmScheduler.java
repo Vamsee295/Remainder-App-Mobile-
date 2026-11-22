@@ -26,7 +26,6 @@ public final class AlarmScheduler {
     static final String SNOOZE_SUFFIX = "#snooze";
     /** "Still to do" follow-ups of a Notify reminder, 5 and 10 minutes after it. */
     static final String FOLLOW_UP_SUFFIX = "#nag";
-    static final int FOLLOW_UPS = 2;
     /** Heads-up shown `early` ms before a reminder. */
     static final String EARLY_SUFFIX = "#early";
 

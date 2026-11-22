@@ -1,10 +1,11 @@
 import * as Haptics from 'expo-haptics';
-import React from 'react';
+import React, { useRef } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import ReanimatedSwipeable, { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 
 import { Badge, Card, Checkbox, IconButton, Txt } from '@/components/kit';
 import { getCategoryConfig, getPriorityConfig, RECURRENCES } from '@/constants/categories';
-import { C } from '@/constants/theme';
+import { BW, C, R } from '@/constants/theme';
 import { AlarmService } from '@/services/alarm-service';
 import { describe, ruleFor } from '@/services/repeat-rules';
 import { Task } from '@/types';
@@ -23,9 +24,52 @@ type Props = {
   onToggle: (id: string) => void;
   onEdit?: (task: Task) => void;
   onSnooze?: (id: string) => void;
+  /** Swipe left. Without it the row doesn't swipe. */
+  onTomorrow?: (id: string) => void;
 };
 
-export function TaskRow({ task, onToggle, onEdit, onSnooze }: Props) {
+/** Swipe right = done, swipe left = tomorrow. Done tasks don't swipe. */
+export function TaskRow(props: Props) {
+  const { task, onToggle, onTomorrow } = props;
+  const swipe = useRef<SwipeableMethods>(null);
+  if (task.completed || !onTomorrow) return (
+      <View style={styles.gap}>
+        <RowCard {...props} />
+      </View>
+    );
+
+  return (
+    <ReanimatedSwipeable
+      ref={swipe}
+      friction={1.6}
+      leftThreshold={90}
+      rightThreshold={90}
+      overshootLeft={false}
+      overshootRight={false}
+      containerStyle={styles.gap}
+      renderLeftActions={() => <SwipeAction label="✓ Done" bg={C.teal} side="left" />}
+      renderRightActions={() => <SwipeAction label="Tomorrow →" bg={C.gold} side="right" />}
+      onSwipeableOpen={(direction) => {
+        swipe.current?.close();
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        // 'right' = the card moved right, uncovering the left (Done) action.
+        if (direction === 'right') onToggle(task.id);
+        else onTomorrow(task.id);
+      }}>
+      <RowCard {...props} />
+    </ReanimatedSwipeable>
+  );
+}
+
+function SwipeAction({ label, bg, side }: { label: string; bg: string; side: 'left' | 'right' }) {
+  return (
+    <View style={[styles.action, { backgroundColor: bg, alignItems: side === 'left' ? 'flex-start' : 'flex-end' }]}>
+      <Txt v="cond" color={side === 'left' ? C.paper : C.ink}>{label}</Txt>
+    </View>
+  );
+}
+
+function RowCard({ task, onToggle, onEdit, onSnooze }: Props) {
   const when = new Date(task.dateTime);
   const late = when < new Date() && !task.completed;
   const category = getCategoryConfig(task.category);
@@ -60,7 +104,10 @@ export function TaskRow({ task, onToggle, onEdit, onSnooze }: Props) {
           {task.category && task.category !== 'other' ? <Badge label={category.label} color={category.color} bg={category.tint} /> : null}
           {task.priority && task.priority !== 'low' ? <Badge label={priority.label} color={C.ink} bg={C.paper2} /> : null}
           {task.alarmEnabled !== false && !task.completed ? <Badge label="⏰ Rings" color={C.paper} bg={C.accent} /> : null}
-          {repeats ? <Badge label={`↻ ${repeatLabel(task, when)}`} color={C.teal} bg="#cfe6df" /> : null}
+          {repeats ? <Badge label={`↻ ${repeatLabel(task, when)}`} color={C.teal} bg={C.tealLight} /> : null}
+          {task.subTasks?.length ? (
+            <Badge label={`☑ ${task.subTasks.filter((s) => s.completed).length}/${task.subTasks.length}`} color={C.ink} bg={C.paper2} />
+          ) : null}
           {late ? <Badge label="Late" color={C.paper} bg={C.accentD} /> : null}
           {task.isExpired ? <Badge label="Expired" color={C.paper} bg={C.ink} /> : null}
           {task.alarmSnoozedCount ? <Badge label={`Snoozed ×${task.alarmSnoozedCount}`} color={C.ink} bg={C.paper2} /> : null}
@@ -79,7 +126,10 @@ export function TaskRow({ task, onToggle, onEdit, onSnooze }: Props) {
 }
 
 const styles = StyleSheet.create({
-  card: { flexDirection: 'row', alignItems: 'flex-start', gap: 14, padding: 14, marginBottom: 16 },
+  card: { flexDirection: 'row', alignItems: 'flex-start', gap: 14, padding: 14 },
+  // Room for the card's hard shadow inside the swipe container, which clips its contents.
+  gap: { marginBottom: 10, paddingRight: 6, paddingBottom: 6 },
+  action: { flex: 1, justifyContent: 'center', paddingHorizontal: 22, borderRadius: R.card, borderWidth: BW, borderColor: C.ink, marginRight: 6, marginBottom: 6 },
   done: { backgroundColor: C.paper2, boxShadow: 'none' },
   body: { flex: 1, gap: 4 },
   title: { fontSize: 21, lineHeight: 24 },

@@ -42,6 +42,7 @@ export interface TaskFormData {
   recurrenceInterval?: number;
   repeatDays?: number[];
   earlyMinutes?: number;
+  subTasks?: SubTask[];
   enableAlarm?: boolean; // Toggle to enable/disable alarm functionality
 }
 

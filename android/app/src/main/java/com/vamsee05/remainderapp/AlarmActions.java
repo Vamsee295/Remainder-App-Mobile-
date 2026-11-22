@@ -22,7 +22,6 @@ import org.json.JSONObject;
 public class AlarmActions extends BroadcastReceiver {
     static final String ACTION_DONE = "com.vamsee05.remainderapp.TASK_DONE";
     static final String ACTION_SNOOZE = "com.vamsee05.remainderapp.TASK_SNOOZE";
-    static final int SNOOZE_MINUTES = 10;
 
     private static final String EVENTS = "AlarmEvents";
     private static final String REMINDER_CHANNEL = "REMINDERS";
@@ -38,7 +37,7 @@ public class AlarmActions extends BroadcastReceiver {
             done(context, id);
         } else if (ACTION_SNOOZE.equals(intent.getAction())) {
             String mode = intent.getStringExtra("mode");
-            snooze(context, id, SNOOZE_MINUTES, data == null ? "default" : data.optString("sound"),
+            snooze(context, id, AppSettings.snoozeMinutes(context), data == null ? "default" : data.optString("sound"),
                 intent.getStringExtra("title"), intent.getStringExtra("description"), mode == null ? "notify" : mode);
         }
         NotificationManager manager = context.getSystemService(NotificationManager.class);
@@ -52,6 +51,7 @@ public class AlarmActions extends BroadcastReceiver {
     static void done(Context context, String id) {
         AlarmScheduler.cancelFollowUps(context, id);
         record(context, id, "done", 0);
+        TodayWidget.remove(context, id);
     }
 
     /** Remind again in `minutes`, and tell the app the new time. */
@@ -131,7 +131,7 @@ public class AlarmActions extends BroadcastReceiver {
                                                   String description, String mode) {
         return builder
             .addAction(0, "Done", button(context, ACTION_DONE, id, title, description, mode))
-            .addAction(0, "Snooze " + SNOOZE_MINUTES + " min", button(context, ACTION_SNOOZE, id, title, description, mode));
+            .addAction(0, "Snooze " + AppSettings.snoozeMinutes(context) + " min", button(context, ACTION_SNOOZE, id, title, description, mode));
     }
 
     private static PendingIntent button(Context context, String action, String id, String title, String description, String mode) {

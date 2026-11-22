@@ -55,6 +55,7 @@ export class RecurrenceService {
             recurrenceInterval: completedTask.recurrenceInterval,
             repeatDays: completedTask.repeatDays,
             earlyMinutes: completedTask.earlyMinutes,
+            subTasks: completedTask.subTasks?.map((s) => ({ ...s, completed: false })), // fresh checklist each time
             alarmEnabled: completedTask.alarmEnabled, // keep Notify vs Ring; it was lost, so repeats of a Notify task rang
             recurrenceParentId: completedTask.recurrenceParentId || completedTask.id,
             // Inherit deadline from parent task

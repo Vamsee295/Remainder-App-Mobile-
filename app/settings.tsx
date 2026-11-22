@@ -3,10 +3,11 @@ import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
-import { Button, Card, IconButton, Screen, ScreenHeader, SectionHeader, Txt } from '@/components/kit';
+import { Button, Card, Chip, FieldLabel, IconButton, Screen, ScreenHeader, SectionHeader, Txt } from '@/components/kit';
 import { C } from '@/constants/theme';
 import { Fix, useHealth } from '@/hooks/use-health';
 import { useTasks } from '@/hooks/use-tasks';
+import { AppSettings, DEFAULT_SETTINGS, loadSettings, saveSettings } from '@/services/app-settings';
 import { exportBackup, pickBackup } from '@/services/backup-service';
 import { NotificationService } from '@/services/notification-service';
 import { StorageService } from '@/services/storage-service';
@@ -44,9 +45,18 @@ export default function SettingsScreen() {
   const [busy, setBusy] = useState(false);
   const [testing, setTesting] = useState(false);
 
+  const [prefs, setPrefs] = useState<AppSettings>(DEFAULT_SETTINGS);
+
   useEffect(() => {
     AsyncStorage.getItem(LAST_BACKUP_KEY).then(setLastBackup).catch(() => {});
+    loadSettings().then(setPrefs);
   }, []);
+
+  const update = (change: Partial<AppSettings>) => {
+    const next = { ...prefs, ...change };
+    setPrefs(next);
+    saveSettings(next);
+  };
 
   const backup = async () => {
     setBusy(true);
@@ -93,7 +103,7 @@ export default function SettingsScreen() {
         <View style={styles.back}>
           <IconButton icon="arrow-back-sharp" label="Back" onPress={() => router.back()} />
         </View>
-        <ScreenHeader eyebrow="Remainder / Setup" hand="so nothing gets missed" title="Phone" mark="Setup." />
+        <ScreenHeader eyebrow="Remainder / Settings" hand="so nothing gets missed" title="Your" mark="Setup." />
 
         <SectionHeader n={1} eyebrow="Reliability" title="Will it ring?" />
         {!canCheck ? (
@@ -145,7 +155,34 @@ export default function SettingsScreen() {
           </>
         )}
 
-        <SectionHeader n={2} eyebrow="Your data" title="Backup" />
+        <SectionHeader n={2} eyebrow="Defaults" title="Reminders" />
+        <FieldLabel>New reminders</FieldLabel>
+        <View style={styles.chips}>
+          <Chip label="Notification" active={!prefs.defaultRing} color={C.ink} onPress={() => update({ defaultRing: false })} />
+          <Chip label="Ring alarm" active={prefs.defaultRing} onPress={() => update({ defaultRing: true })} />
+        </View>
+        <FieldLabel>Snooze for</FieldLabel>
+        <View style={styles.chips}>
+          {[5, 10, 15, 30].map((m) => (
+            <Chip key={m} label={`${m} min`} active={prefs.snooze === m} color={C.teal} onPress={() => update({ snooze: m })} />
+          ))}
+        </View>
+        <FieldLabel>If a notification is ignored</FieldLabel>
+        <View style={styles.chips}>
+          {[0, 1, 2, 3].map((n) => (
+            <Chip key={n} label={n === 0 ? 'Once only' : `+${n} more`} active={prefs.followUps === n} color={C.teal} onPress={() => update({ followUps: n })} />
+          ))}
+        </View>
+        <Txt v="mono" style={styles.hint}>{'> Follow-ups come 5 minutes apart until you tap Done or Snooze.'}</Txt>
+        <FieldLabel>An alarm rings for</FieldLabel>
+        <View style={styles.chips}>
+          {[1, 2, 5, 10].map((m) => (
+            <Chip key={m} label={`${m} min`} active={prefs.ringMinutes === m} color={C.teal} onPress={() => update({ ringMinutes: m })} />
+          ))}
+        </View>
+        <Txt v="mono" style={styles.hint}>{'> Then it stops and leaves a "Missed alarm" note with Done / Snooze.'}</Txt>
+
+        <SectionHeader n={3} eyebrow="Your data" title="Backup" />
         <Txt style={styles.why}>
           Everything lives only on this phone. Save a backup file to Google Drive, Files or a chat with yourself, and restore it after
           reinstalling or on a new phone.
@@ -173,4 +210,5 @@ const styles = StyleSheet.create({
   test: { marginTop: 4 },
   hint: { fontSize: 12, color: C.mute, marginTop: 8 },
   restore: { marginTop: 12 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingRight: 4, paddingBottom: 4 },
 });

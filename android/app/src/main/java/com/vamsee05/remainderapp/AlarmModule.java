@@ -107,6 +107,18 @@ public class AlarmModule extends ReactContextBaseJavaModule {
         promise.resolve(null);
     }
 
+    /** Settings the native side uses: snooze minutes, follow-up count, ring minutes. */
+    @ReactMethod
+    public void setSettings(double snooze, double followUps, double ringMinutes) {
+        AppSettings.save(reactContext, (int) snooze, (int) followUps, (int) ringMinutes);
+    }
+
+    /** Upcoming open tasks for the home-screen widget: JSON [{t: epochMs, title}] sorted by time. */
+    @ReactMethod
+    public void updateWidget(String json) {
+        TodayWidget.save(reactContext, json);
+    }
+
     @ReactMethod
     public void cancelAlarm(String alarmId, Promise promise) {
         try {

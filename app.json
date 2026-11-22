@@ -1,6 +1,6 @@
 ﻿{
   "expo": {
-    "name": "remainder-app",
+    "name": "Remainder",
     "slug": "remainder-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -50,7 +50,7 @@
           "resizeMode": "contain",
           "backgroundColor": "#f5efe6",
           "dark": {
-            "backgroundColor": "#f5efe6"
+            "backgroundColor": "#151311"
           }
         }
       ],

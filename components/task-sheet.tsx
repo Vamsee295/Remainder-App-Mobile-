@@ -4,14 +4,15 @@ import * as MediaLibrary from 'expo-media-library';
 import React, { useEffect, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import { Button, Card, Chip, Field, FieldLabel, IconButton, Sheet, Txt } from '@/components/kit';
+import { Button, Card, Checkbox, Chip, Field, FieldLabel, IconButton, Sheet, Txt } from '@/components/kit';
 import { MonthGrid } from '@/components/month-grid';
 import { formatDay, formatTime } from '@/components/task-row';
 import { CATEGORIES, PRIORITIES, RECURRENCES } from '@/constants/categories';
 import { BW, C, R, SH } from '@/constants/theme';
+import { loadSettings } from '@/services/app-settings';
 import { NotificationService } from '@/services/notification-service';
 import { StorageService } from '@/services/storage-service';
-import { RecurrenceType, Task, TaskCategory, TaskFormData, TaskPriority, TaskSuggestion } from '@/types';
+import { RecurrenceType, SubTask, Task, TaskCategory, TaskFormData, TaskPriority, TaskSuggestion } from '@/types';
 
 type Props = {
   visible: boolean;
@@ -54,6 +55,13 @@ export function TaskSheet({ visible, task, prefilledDate, onSave, onCancel, onDe
   const [recurrence, setRecurrence] = useState<RecurrenceType>('none');
   const [repeatDays, setRepeatDays] = useState<number[]>([]);
   const [early, setEarly] = useState(0);
+  const [steps, setSteps] = useState<SubTask[]>([]);
+  const [stepText, setStepText] = useState('');
+  const addStep = () => {
+    if (!stepText.trim()) return;
+    setSteps([...steps, { id: Date.now().toString(36) + steps.length, text: stepText.trim(), completed: false }]);
+    setStepText('');
+  };
   const [picker, setPicker] = useState<'date' | 'time' | null>(null);
   const [errors, setErrors] = useState<{ title?: string; when?: string }>({});
   const [suggestions, setSuggestions] = useState<TaskSuggestion[]>([]);
@@ -71,7 +79,10 @@ export function TaskSheet({ visible, task, prefilledDate, onSave, onCancel, onDe
     setRecurrence(task?.recurrence ?? 'none');
     setRepeatDays(task?.recurrence === 'days' ? task.repeatDays ?? [] : []);
     setEarly(task?.earlyMinutes ?? 0);
+    setSteps(task?.subTasks ?? []);
+    setStepText('');
     setAlarm(task ? task.alarmEnabled !== false : false);
+    if (!task) loadSettings().then((s) => setAlarm(s.defaultRing)); // new task: your default from Settings
     setPicker(null);
     setErrors({});
     StorageService.loadTaskSuggestions().then((all) => setSuggestions(all.slice(0, 6))).catch(() => setSuggestions([]));
@@ -104,6 +115,8 @@ export function TaskSheet({ visible, task, prefilledDate, onSave, onCancel, onDe
       recurrence,
       repeatDays: recurrence === 'days' ? repeatDays : undefined,
       earlyMinutes: early,
+      // A step typed but not yet added with enter still counts.
+      subTasks: stepText.trim() ? [...steps, { id: Date.now().toString(36), text: stepText.trim(), completed: false }] : steps,
       enableAlarm: alarm,
     });
   };
@@ -195,6 +208,29 @@ export function TaskSheet({ visible, task, prefilledDate, onSave, onCancel, onDe
           style={styles.notes}
         />
 
+        <FieldLabel>Checklist</FieldLabel>
+        {steps.map((s) => (
+          <View key={s.id} style={styles.step}>
+            <Checkbox
+              checked={s.completed}
+              label={`Step ${s.text} ${s.completed ? 'done' : 'not done'}`}
+              onPress={() => setSteps(steps.map((x) => (x.id === s.id ? { ...x, completed: !x.completed } : x)))}
+            />
+            <Txt style={[styles.flex, s.completed && styles.stepDone]}>{s.text}</Txt>
+            <IconButton icon="close-sharp" label={`Remove step ${s.text}`} onPress={() => setSteps(steps.filter((x) => x.id !== s.id))} />
+          </View>
+        ))}
+        <Field
+          value={stepText}
+          onChangeText={setStepText}
+          onSubmitEditing={addStep}
+          placeholder="+ Add a step, then press enter"
+          returnKeyType="done"
+          blurOnSubmit={false}
+          maxLength={120}
+          accessibilityLabel="Add a checklist step"
+        />
+
         <FieldLabel>When</FieldLabel>
         <View style={styles.row}>
           <Tile label="Date" value={formatDay(when)} active={picker === 'date'} onPress={() => setPicker(picker === 'date' ? null : 'date')} />
@@ -254,7 +290,7 @@ export function TaskSheet({ visible, task, prefilledDate, onSave, onCancel, onDe
           <Chip label="Ring alarm" active={alarm} onPress={() => setAlarm(true)} />
         </View>
         <Txt v="mono" style={styles.note}>
-          {alarm ? '> Rings like an alarm until you dismiss or snooze it.' : '> A notification, repeated 5 and 10 min later if ignored.'}
+          {alarm ? '> Rings like an alarm until you dismiss or snooze it.' : '> A notification with Done / Snooze, repeated if you ignore it (change in Settings).'}
         </Txt>
 
         <FieldLabel>Heads-up before</FieldLabel>
@@ -382,6 +418,8 @@ const styles = StyleSheet.create({
   stepper: { alignItems: 'center', gap: 6 },
   ampm: { gap: 10, marginLeft: 8 },
   note: { fontSize: 12, color: C.mute, marginTop: 10 },
+  step: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10, paddingRight: 4 },
+  stepDone: { textDecorationLine: 'line-through', color: C.mute },
   days: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, paddingRight: 4 },
   day: { width: 40, height: 40, borderRadius: 20, borderWidth: BW, borderColor: C.ink, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center' },
   dayOn: { backgroundColor: C.teal },

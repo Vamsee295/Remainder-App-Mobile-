@@ -9,7 +9,7 @@ import { useTasks } from '@/hooks/use-tasks';
 import { Task } from '@/types';
 
 export default function CalendarScreen() {
-  const { tasks, saveTask, toggleTask, deleteTask, snoozeTask } = useTasks();
+  const { tasks, saveTask, toggleTask, deleteTask, snoozeTask, moveToTomorrow } = useTasks();
   const [selected, setSelected] = useState(() => new Date());
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
@@ -43,6 +43,7 @@ export default function CalendarScreen() {
             task={task}
             onToggle={toggleTask}
             onSnooze={snoozeTask}
+            onTomorrow={moveToTomorrow}
             onEdit={(t) => {
               setEditing(t);
               setSheetOpen(true);
