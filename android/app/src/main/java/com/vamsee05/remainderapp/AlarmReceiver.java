@@ -40,14 +40,15 @@ public class AlarmReceiver extends BroadcastReceiver {
             String title = data.optString("title", "Reminder");
             String description = data.optString("description", "");
             AlarmActions.showReminder(context, baseId, title, description, followUp > 0);
-            // Not done yet? Remind again in 5 minutes, up to FOLLOW_UPS times. Done / Snooze cancel these.
-            if (followUp < AlarmScheduler.FOLLOW_UPS) {
+            // Not done yet? Remind again in 5 minutes, up to the follow-ups set in Settings. Done / Snooze cancel these.
+            int followUps = AppSettings.followUps(context);
+            if (followUp < followUps) {
                 AlarmScheduler.schedule(context, baseId + AlarmScheduler.FOLLOW_UP_SUFFIX, System.currentTimeMillis() + 5 * 60000L,
                     data.optString("sound"), title, description, "", 0, "notify", followUp + 1);
             }
             // A follow-up re-uses its own key for the next one; only the last follow-up is forgotten here.
             boolean isFollowUp = alarmId.endsWith(AlarmScheduler.FOLLOW_UP_SUFFIX);
-            if (!isFollowUp || followUp >= AlarmScheduler.FOLLOW_UPS) AlarmScheduler.afterFired(context, alarmId, data);
+            if (!isFollowUp || followUp >= followUps) AlarmScheduler.afterFired(context, alarmId, data);
             return;
         }
 

@@ -1,6 +1,12 @@
 package com.vamsee05.remainderapp;
 
+import android.app.Activity;
 import android.app.AlarmManager;
+import android.speech.RecognizerIntent;
+
+import java.util.ArrayList;
+
+import com.facebook.react.bridge.BaseActivityEventListener;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
@@ -23,9 +29,42 @@ import com.facebook.react.bridge.ReactMethod;
 public class AlarmModule extends ReactContextBaseJavaModule {
     private final ReactApplicationContext reactContext;
 
+    private static final int SPEECH_REQUEST = 4711;
+    private Promise speechPromise;
+
     public AlarmModule(ReactApplicationContext context) {
         super(context);
         this.reactContext = context;
+        // Hands the speech recogniser's result back to listen().
+        context.addActivityEventListener(new BaseActivityEventListener() {
+            @Override
+            public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent data) {
+                if (requestCode != SPEECH_REQUEST || speechPromise == null) return;
+                ArrayList<String> results = data == null ? null : data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
+                speechPromise.resolve(resultCode == Activity.RESULT_OK && results != null && !results.isEmpty() ? results.get(0) : null);
+                speechPromise = null;
+            }
+        });
+    }
+
+    /** Opens Android's speech recogniser and resolves with what was said (null if cancelled). */
+    @ReactMethod
+    public void listen(String prompt, Promise promise) {
+        Activity activity = getCurrentActivity();
+        if (activity == null) {
+            promise.reject("NO_ACTIVITY", "The app is not in the foreground");
+            return;
+        }
+        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(RecognizerIntent.EXTRA_PROMPT, prompt);
+        try {
+            speechPromise = promise;
+            activity.startActivityForResult(intent, SPEECH_REQUEST);
+        } catch (Exception e) {
+            speechPromise = null;
+            promise.reject("NO_SPEECH", "Voice typing isn't available on this phone");
+        }
     }
 
     @NonNull
@@ -105,6 +144,24 @@ public class AlarmModule extends ReactContextBaseJavaModule {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         }
         promise.resolve(null);
+    }
+
+    /** Shows a reminder right now (place reminders), with Done / Snooze buttons. */
+    @ReactMethod
+    public void notifyNow(String id, String title, String description) {
+        AlarmActions.showReminder(reactContext, id, title, description, false);
+    }
+
+    /** Settings the native side uses: snooze minutes, follow-up count, ring minutes. */
+    @ReactMethod
+    public void setSettings(double snooze, double followUps, double ringMinutes) {
+        AppSettings.save(reactContext, (int) snooze, (int) followUps, (int) ringMinutes);
+    }
+
+    /** Upcoming open tasks for the home-screen widget: JSON [{t: epochMs, title}] sorted by time. */
+    @ReactMethod
+    public void updateWidget(String json) {
+        TodayWidget.save(reactContext, json);
     }
 
     @ReactMethod

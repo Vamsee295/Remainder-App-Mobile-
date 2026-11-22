@@ -3,9 +3,10 @@
  * each action re-reads it, changes it, writes it, then refreshes state.
  */
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { AppState } from 'react-native';
+import { AppState, NativeModules, Platform } from 'react-native';
 
 import { AlarmService } from '@/services/alarm-service';
+import { syncGeofences } from '@/services/geofence';
 import { NotificationService } from '@/services/notification-service';
 import { RecurrenceService } from '@/services/recurrence-service';
 import { ruleFor, snap } from '@/services/repeat-rules';
@@ -20,6 +21,8 @@ type TasksCtx = {
   deleteTask: (id: string) => Promise<void>;
   snoozeTask: (id: string, minutes?: number) => Promise<void>;
   restoreTasks: (tasks: Task[]) => Promise<void>;
+  moveToTomorrow: (id: string) => Promise<void>;
+  moveOverdueToToday: () => Promise<void>;
 };
 
 const Ctx = createContext<TasksCtx | null>(null);
@@ -55,8 +58,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
       let when = new Date(data.date);
       when.setHours(data.time.getHours(), data.time.getMinutes(), 0, 0);
       // Picked days / monthly: remember the days, and start on the first day the rule fires.
-      const repeatDays = data.recurrence === 'days' ? data.repeatDays : data.recurrence === 'monthDay' ? [when.getDate()] : undefined;
-      when = snap(when, ruleFor(data.recurrence, repeatDays, when));
+      const repeatDays = data.recurrence === 'days' ? data.repeatDays : data.recurrence === 'monthDay' ? [when.getDate()] : undefined;      when = snap(when, ruleFor(data.recurrence, repeatDays, when));
 
       const createdAt = editing?.createdAt ?? new Date().toISOString();
       const task: Task = {
@@ -70,6 +72,8 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
         recurrenceInterval: data.recurrenceInterval,
         repeatDays,
         earlyMinutes: data.earlyMinutes || undefined,
+        subTasks: data.subTasks?.length ? data.subTasks : undefined,
+        place: data.place,
         alarmEnabled: data.enableAlarm !== false,
         deadlineDate: AlarmService.calculateDeadlineDate(createdAt, data.recurrence),
         isExpired: false,
@@ -142,6 +146,47 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
       await StorageService.updateTask(updated);
     });
 
+  /** Move tasks to new times and set their reminders again. */
+  const moveTasks = (moves: { id: string; when: Date }[]) =>
+    run(async () => {
+      const all = await StorageService.loadTasks();
+      for (const { id, when } of moves) {
+        const task = all.find((t) => t.id === id);
+        if (!task || task.completed) continue;
+        await cancel(task);
+        const moved: Task = { ...task, dateTime: when.toISOString(), isExpired: false };
+        await schedule(moved);
+        await StorageService.updateTask(moved);
+      }
+    });
+
+  /** Swipe left: same time tomorrow (a late task goes to tomorrow at its time, not the day after its old date). */
+  const moveToTomorrow = (id: string) => {
+    const task = tasks.find((t) => t.id === id);
+    if (!task) return Promise.resolve();
+    const old = new Date(task.dateTime);
+    const when = old.getTime() > Date.now() ? new Date(old) : new Date();
+    when.setDate(when.getDate() + 1);
+    when.setHours(old.getHours(), old.getMinutes(), 0, 0);
+    return moveTasks([{ id, when }]);
+  };
+
+  /** "Move all to today": each late task keeps its clock time if that's still ahead today, otherwise the next full hour. */
+  const moveOverdueToToday = () => {
+    const now = new Date();
+    const nextHour = new Date(now);
+    nextHour.setHours(now.getHours() + 1, 0, 0, 0);
+    const late = tasks.filter((t) => !t.completed && new Date(t.dateTime) < now);
+    return moveTasks(
+      late.map((t) => {
+        const old = new Date(t.dateTime);
+        const today = new Date(now);
+        today.setHours(old.getHours(), old.getMinutes(), 0, 0);
+        return { id: t.id, when: today > now ? today : nextHour };
+      }),
+    );
+  };
+
   /** Replace every task with a restored backup: stop the old reminders, then set reminders for the restored ones. */
   const restoreTasks = (restored: Task[]) =>
     run(async () => {
@@ -167,6 +212,22 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     }
     if (events.length) await reload();
   };
+
+  // Home-screen widget: send open tasks for the next two days (it picks "today" itself, so it rolls over at midnight).
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !NativeModules.AlarmModule?.updateWidget) return;
+    const horizon = Date.now() + 2 * 86400000;
+    const items = tasks
+      .filter((t) => !t.completed && !t.isExpired && new Date(t.dateTime).getTime() < horizon)
+      .map((t) => ({ id: t.id, t: new Date(t.dateTime).getTime(), title: t.title }))
+      .sort((a, b) => a.t - b.t);
+    NativeModules.AlarmModule.updateWidget(JSON.stringify(items));
+  }, [tasks]);
+
+  // Place reminders: keep the phone watching exactly the open tasks that have a place.
+  useEffect(() => {
+    syncGeofences(tasks);
+  }, [tasks]);
 
   useEffect(() => {
     reload();
@@ -213,7 +274,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return <Ctx.Provider value={{ tasks, reload, saveTask, toggleTask, deleteTask, snoozeTask, restoreTasks }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ tasks, reload, saveTask, toggleTask, deleteTask, snoozeTask, restoreTasks, moveToTomorrow, moveOverdueToToday }}>{children}</Ctx.Provider>;
 }
 
 export function useTasks() {

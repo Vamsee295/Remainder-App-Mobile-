@@ -1,6 +1,6 @@
 ﻿{
   "expo": {
-    "name": "remainder-app",
+    "name": "Remainder",
     "slug": "remainder-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -41,6 +41,8 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      ["expo-location", { "isAndroidBackgroundLocationEnabled": true, "locationAlwaysAndWhenInUsePermission": "Remainder uses your location to remind you when you arrive at or leave a saved place." }],
+      ["expo-calendar", { "calendarPermission": "Remainder shows your calendar events next to your tasks." }],
       "expo-router",
       [
         "expo-splash-screen",
@@ -50,7 +52,7 @@
           "resizeMode": "contain",
           "backgroundColor": "#f5efe6",
           "dark": {
-            "backgroundColor": "#f5efe6"
+            "backgroundColor": "#151311"
           }
         }
       ],

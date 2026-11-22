@@ -1,10 +1,11 @@
 import * as Haptics from 'expo-haptics';
 import React, { useEffect, useState } from 'react';
-import { FlatList, Keyboard, ScrollView, StyleSheet, View } from 'react-native';
+import { FlatList, Keyboard, ScrollView, Share, StyleSheet, View } from 'react-native';
 
 import { Badge, Button, Card, Checkbox, Chip, Empty, Fab, Field, FieldLabel, IconButton, Screen, ScreenHeader, Sheet, Stamp, Txt } from '@/components/kit';
 import { MonthGrid } from '@/components/month-grid';
 import { C } from '@/constants/theme';
+import { shareListText } from '@/services/share-format';
 import { StorageService } from '@/services/storage-service';
 import { TodoItem } from '@/types';
 
@@ -18,7 +19,7 @@ function deadlineBadge(deadline: string) {
   const days = Math.floor((new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() - today.getTime()) / 86400000);
   if (days < 0) return <Badge label="Overdue" color={C.paper} bg={C.accentD} />;
   if (days === 0) return <Badge label="Today" />;
-  if (days === 1) return <Badge label="Tomorrow" color={C.teal} bg="#cfe6df" />;
+  if (days === 1) return <Badge label="Tomorrow" color={C.teal} bg={C.tealLight} />;
   return <Badge label={d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} color={C.ink} bg={C.paper2} />;
 }
 
@@ -72,7 +73,18 @@ export default function TodoScreen() {
             hand="small stuff, no alarms"
             title="Quick"
             mark="List."
-            right={active.length ? <Stamp label={`${active.length} left`} /> : null}
+            right={
+              <View style={styles.headRight}>
+                {active.length ? <Stamp label={`${active.length} left`} /> : null}
+                {todos.length ? (
+                  <IconButton
+                    icon="share-social-sharp"
+                    label="Share this list"
+                    onPress={() => Share.share({ message: shareListText('My to-do list', todos.map((t) => ({ text: t.text, done: t.completed }))) })}
+                  />
+                ) : null}
+              </View>
+            }
           />
         }
         ListEmptyComponent={<Empty title="List is clear" hint="tap + to add the first item" />}
@@ -155,6 +167,7 @@ export default function TodoScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   shrink: { flexShrink: 1 },
+  headRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   list: { padding: 20, paddingBottom: 110 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, borderBottomWidth: 1.5, borderStyle: 'dashed', borderColor: C.line },
   num: { width: 34 },
