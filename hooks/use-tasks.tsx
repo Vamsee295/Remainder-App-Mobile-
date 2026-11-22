@@ -8,6 +8,7 @@ import { AppState } from 'react-native';
 import { AlarmService } from '@/services/alarm-service';
 import { NotificationService } from '@/services/notification-service';
 import { RecurrenceService } from '@/services/recurrence-service';
+import { ruleFor, snap } from '@/services/repeat-rules';
 import { StorageService } from '@/services/storage-service';
 import { Task, TaskFormData } from '@/types';
 
@@ -18,6 +19,7 @@ type TasksCtx = {
   toggleTask: (id: string) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   snoozeTask: (id: string, minutes?: number) => Promise<void>;
+  restoreTasks: (tasks: Task[]) => Promise<void>;
 };
 
 const Ctx = createContext<TasksCtx | null>(null);
@@ -50,8 +52,11 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
 
   const saveTask = (data: TaskFormData, editing?: Task | null) =>
     run(async () => {
-      const when = new Date(data.date);
+      let when = new Date(data.date);
       when.setHours(data.time.getHours(), data.time.getMinutes(), 0, 0);
+      // Picked days / monthly: remember the days, and start on the first day the rule fires.
+      const repeatDays = data.recurrence === 'days' ? data.repeatDays : data.recurrence === 'monthDay' ? [when.getDate()] : undefined;
+      when = snap(when, ruleFor(data.recurrence, repeatDays, when));
 
       const createdAt = editing?.createdAt ?? new Date().toISOString();
       const task: Task = {
@@ -63,6 +68,8 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
         priority: data.priority,
         recurrence: data.recurrence,
         recurrenceInterval: data.recurrenceInterval,
+        repeatDays,
+        earlyMinutes: data.earlyMinutes || undefined,
         alarmEnabled: data.enableAlarm !== false,
         deadlineDate: AlarmService.calculateDeadlineDate(createdAt, data.recurrence),
         isExpired: false,
@@ -135,6 +142,16 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
       await StorageService.updateTask(updated);
     });
 
+  /** Replace every task with a restored backup: stop the old reminders, then set reminders for the restored ones. */
+  const restoreTasks = (restored: Task[]) =>
+    run(async () => {
+      for (const task of await StorageService.loadTasks()) await cancel(task);
+      for (const task of restored) {
+        if (!task.completed && !task.isExpired && new Date(task.dateTime).getTime() > Date.now()) await schedule(task);
+      }
+      await StorageService.saveTasks(restored); // missed repeats roll forward on the next check
+    });
+
   /** Apply Done / Snooze taps made on notifications or the alarm screen while the app was closed. */
   const applyNativeEvents = async () => {
     const events = await NotificationService.consumeNativeEvents();
@@ -196,7 +213,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return <Ctx.Provider value={{ tasks, reload, saveTask, toggleTask, deleteTask, snoozeTask }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ tasks, reload, saveTask, toggleTask, deleteTask, snoozeTask, restoreTasks }}>{children}</Ctx.Provider>;
 }
 
 export function useTasks() {

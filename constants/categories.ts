@@ -19,6 +19,9 @@ export const PRIORITIES: { value: TaskPriority; label: string; color: string }[]
 export const RECURRENCES: { value: RecurrenceType; label: string; note: string }[] = [
     { value: 'none', label: 'Once', note: 'Rings one time.' },
     { value: 'daily', label: 'Daily', note: 'Rings every day until you stop it.' },
+    { value: 'weekdays', label: 'Weekdays', note: 'Rings Monday to Friday.' },
+    { value: 'days', label: 'Pick days', note: 'Rings on the days you pick below.' },
+    { value: 'monthDay', label: 'Monthly', note: 'Rings on this date every month (last day in shorter months).' },
     { value: 'weekly', label: '7 days', note: 'Rings daily for 7 days, then stops by itself.' },
     { value: 'monthly', label: '30 days', note: 'Rings daily for 30 days, then stops by itself.' },
 ];

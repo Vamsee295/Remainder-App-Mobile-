@@ -42,7 +42,10 @@ public class AlarmActions extends BroadcastReceiver {
                 intent.getStringExtra("title"), intent.getStringExtra("description"), mode == null ? "notify" : mode);
         }
         NotificationManager manager = context.getSystemService(NotificationManager.class);
-        if (manager != null) manager.cancel(id.hashCode());
+        if (manager != null) {
+            manager.cancel(id.hashCode());
+            manager.cancel((id + AlarmScheduler.EARLY_SUFFIX).hashCode()); // heads-up, if this came from one
+        }
     }
 
     /** Task finished: stop this round's follow-ups and tell the app. Tomorrow's repeat is left alone. */
@@ -55,7 +58,7 @@ public class AlarmActions extends BroadcastReceiver {
     static void snooze(Context context, String id, int minutes, String sound, String title, String description, String mode) {
         AlarmScheduler.cancelFollowUps(context, id);
         long time = System.currentTimeMillis() + minutes * 60000L;
-        AlarmScheduler.schedule(context, id + AlarmScheduler.SNOOZE_SUFFIX, time, sound, title, description, false, 0, mode, 0);
+        AlarmScheduler.schedule(context, id + AlarmScheduler.SNOOZE_SUFFIX, time, sound, title, description, "", 0, mode, 0);
         record(context, id, "snooze", time);
     }
 
@@ -100,6 +103,27 @@ public class AlarmActions extends BroadcastReceiver {
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setContentIntent(openApp(context))
             .setAutoCancel(true), id, title, description, "notify").build());
+    }
+
+    /** Heads-up before a reminder: "In 15 min: Team meeting". Only a Done button; snoozing a heads-up makes no sense. */
+    static void showHeadsUp(Context context, String id, String title, long earlyMs) {
+        NotificationManager manager = context.getSystemService(NotificationManager.class);
+        if (manager == null) return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            manager.createNotificationChannel(new NotificationChannel(REMINDER_CHANNEL, "Reminders", NotificationManager.IMPORTANCE_HIGH));
+        }
+        long minutes = earlyMs / 60000;
+        String when = minutes >= 1440 ? "Tomorrow" : minutes >= 60 ? "In " + (minutes / 60) + " h" : "In " + minutes + " min";
+        manager.notify((id + AlarmScheduler.EARLY_SUFFIX).hashCode(), new NotificationCompat.Builder(context, REMINDER_CHANNEL)
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentTitle(when + ": " + (title == null || title.isEmpty() ? "Reminder" : title))
+            .setContentText("Heads-up from Remainder")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setContentIntent(openApp(context))
+            .setAutoCancel(true)
+            .addAction(0, "Done", button(context, ACTION_DONE, id, title, "", "notify"))
+            .build());
     }
 
     /** Adds "Done" and "Snooze 10 min" buttons. `mode` is how the snoozed reminder comes back: "ring" or "notify". */

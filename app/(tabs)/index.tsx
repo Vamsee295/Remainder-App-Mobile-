@@ -1,11 +1,13 @@
+import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { RefreshControl, ScrollView, SectionList, StyleSheet, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, SectionList, StyleSheet, View } from 'react-native';
 
-import { Chip, Empty, Fab, PromptInput, Screen, ScreenHeader, SectionHeader, Segmented, Stamp } from '@/components/kit';
+import { Card, Chip, Empty, Fab, IconButton, PromptInput, Screen, ScreenHeader, SectionHeader, Segmented, Stamp, Txt } from '@/components/kit';
 import { TaskRow } from '@/components/task-row';
 import { TaskSheet } from '@/components/task-sheet';
 import { CATEGORIES } from '@/constants/categories';
 import { C } from '@/constants/theme';
+import { useHealth } from '@/hooks/use-health';
 import { useTasks } from '@/hooks/use-tasks';
 import { parseQuickAdd } from '@/services/quick-add';
 import { Task, TaskCategory, TaskFilter } from '@/types';
@@ -51,6 +53,7 @@ export default function TasksScreen() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const { problems } = useHealth();
 
   const active = tasks.filter((t) => !t.completed);
   const dueToday = active.filter((t) => new Date(t.dateTime).toDateString() === new Date().toDateString()).length;
@@ -74,8 +77,24 @@ export default function TasksScreen() {
         hand={dueToday ? `hi — ${dueToday} ${dueToday === 1 ? 'thing' : 'things'} due today` : 'hi — nothing due today'}
         title="Get it"
         mark="Done."
-        right={active.length ? <Stamp label={`${active.length} open`} /> : null}
+        right={
+          <View style={styles.headRight}>
+            {active.length ? <Stamp label={`${active.length} open`} /> : null}
+            <IconButton icon="settings-sharp" label="Phone setup and backup" onPress={() => router.push('/settings')} />
+          </View>
+        }
       />
+
+      {problems.length ? (
+        <Pressable onPress={() => router.push('/settings')} accessibilityRole="button" accessibilityLabel="Reminders may not ring. Open phone setup.">
+          <Card style={styles.warn}>
+            <Txt v="cond" color={C.paper}>! Reminders may not ring</Txt>
+            <Txt v="mono" color={C.paper} style={styles.warnText}>
+              {`> ${problems.length} phone setting${problems.length > 1 ? 's' : ''} to fix. Tap to open setup.`}
+            </Txt>
+          </Card>
+        </Pressable>
+      ) : null}
 
       <PromptInput
         value={quick}
@@ -169,5 +188,8 @@ export default function TasksScreen() {
 const styles = StyleSheet.create({
   list: { padding: 20, paddingRight: 26, paddingBottom: 120 },
   bleed: { marginLeft: -20, marginRight: -26 },
+  headRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  warn: { backgroundColor: C.accentD, padding: 14, marginBottom: 16, gap: 4 },
+  warnText: { fontSize: 12 },
   categories: { gap: 8, paddingTop: 12, paddingBottom: 6, paddingHorizontal: 20 },
 });

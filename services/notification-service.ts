@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform, NativeModules } from 'react-native';
 import { Task } from '@/types';
 import { AlarmService } from './alarm-service';
+import { ruleFor, step, toNative } from './repeat-rules';
 
 // Get native alarm module (Android only)
 const { AlarmModule } = NativeModules;
@@ -95,7 +96,7 @@ export class NotificationService {
                 try {
                     const { StorageService } = require('./storage-service');
                     const soundUri = await StorageService.loadSelectedAlarmSound();
-                    const repeats = Boolean(task.recurrence && task.recurrence !== 'none');
+                    const repeat = toNative(ruleFor(task.recurrence, task.repeatDays, taskDate));
 
                     await AlarmModule.setAlarm(
                         task.id,
@@ -103,9 +104,10 @@ export class NotificationService {
                         soundUri && soundUri.startsWith('content://') ? soundUri : 'default',
                         task.title,
                         task.description || '',
-                        repeats, // every repeat type rings daily; weekly / monthly just stop at the deadline
+                        repeat, // "" | "daily" | "days:1,3,5" | "monthly:15"; 7 / 30-day repeats also stop at the deadline
                         task.deadlineDate ? new Date(task.deadlineDate).getTime() : 0,
-                        task.alarmEnabled !== false ? 'ring' : 'notify'
+                        task.alarmEnabled !== false ? 'ring' : 'notify',
+                        (task.earlyMinutes || 0) * 60000
                     );
                     return [task.id];
                 } catch (error) {
@@ -125,12 +127,18 @@ export class NotificationService {
 
             // Main notification, once per day for repeating tasks (up to the deadline).
             // ponytail: "Daily" is scheduled 14 days ahead and topped up when the app opens (rollRepeats in use-tasks).
-            const repeatDays = !task.recurrence || task.recurrence === 'none' ? 1 : task.recurrence === 'weekly' ? 7 : task.recurrence === 'monthly' ? 30 : 14;
+            const rule = ruleFor(task.recurrence, task.repeatDays, taskDate);
+            const count = rule.kind === 'none' ? 1 : task.recurrence === 'weekly' ? 7 : task.recurrence === 'monthly' ? 30 : 14;
             const until = task.deadlineDate ? new Date(task.deadlineDate).getTime() : Infinity;
-            for (let day = 0; day < repeatDays; day++) {
-                const date = new Date(taskDate);
-                date.setDate(date.getDate() + day);
+            for (let i = 0, date = taskDate; i < count; i++, date = step(date, rule)) {
                 if (date.getTime() > until) break;
+                const heads = task.earlyMinutes ? new Date(date.getTime() - task.earlyMinutes * 60000) : null;
+                if (heads && heads > now) {
+                    notificationIds.push(await Notifications.scheduleNotificationAsync({
+                        content: { title: `Coming up: ${task.title}`, body: 'Heads-up from Remainder', data: { taskId: task.id } },
+                        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: heads },
+                    }));
+                }
                 const id = await Notifications.scheduleNotificationAsync({
                     content: {
                         title: `🔔 ${task.title}`,
@@ -211,9 +219,10 @@ export class NotificationService {
             soundUri && soundUri.startsWith('content://') ? soundUri : 'default',
             'Test alarm',
             'If you can hear this, alarms work.',
-            false,
+            '',
             0,
-            'ring'
+            'ring',
+            0
         );
     }
 

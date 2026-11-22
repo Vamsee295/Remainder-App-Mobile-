@@ -1,5 +1,6 @@
 import { Task, RecurrenceType } from '@/types';
 import { AlarmService } from './alarm-service';
+import { nextAfter, ruleFor } from './repeat-rules';
 
 export class RecurrenceService {
     /**
@@ -10,13 +11,10 @@ export class RecurrenceService {
             return null;
         }
 
-        // Every repeat type reminds daily ("7 days" / "30 days" just stop at their deadline),
-        // matching the native alarm. Skip days already gone so a late tick never schedules the past.
-        const next = new Date(task.dateTime);
-        const now = Date.now();
-        do next.setDate(next.getDate() + 1);
-        while (next.getTime() <= now);
-        return next;
+        // Same rules as the native alarm (services/repeat-rules.ts). Skips occurrences already gone,
+        // so a late tick never schedules the past.
+        const from = new Date(task.dateTime);
+        return nextAfter(from, ruleFor(task.recurrence, task.repeatDays, from));
     }
 
     /**
@@ -55,6 +53,8 @@ export class RecurrenceService {
             priority: completedTask.priority,
             recurrence: completedTask.recurrence,
             recurrenceInterval: completedTask.recurrenceInterval,
+            repeatDays: completedTask.repeatDays,
+            earlyMinutes: completedTask.earlyMinutes,
             alarmEnabled: completedTask.alarmEnabled, // keep Notify vs Ring; it was lost, so repeats of a Notify task rang
             recurrenceParentId: completedTask.recurrenceParentId || completedTask.id,
             // Inherit deadline from parent task

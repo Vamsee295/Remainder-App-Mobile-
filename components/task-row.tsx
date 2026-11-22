@@ -6,10 +6,17 @@ import { Badge, Card, Checkbox, IconButton, Txt } from '@/components/kit';
 import { getCategoryConfig, getPriorityConfig, RECURRENCES } from '@/constants/categories';
 import { C } from '@/constants/theme';
 import { AlarmService } from '@/services/alarm-service';
+import { describe, ruleFor } from '@/services/repeat-rules';
 import { Task } from '@/types';
 
 export const formatTime = (d: Date) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 export const formatDay = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+/** "Daily", "Weekdays", "Mon Wed Fri", "Monthly on 15"; the legacy 7 / 30-day repeats keep their labels. */
+const repeatLabel = (task: Task, when: Date) =>
+  task.recurrence === 'weekly' || task.recurrence === 'monthly'
+    ? RECURRENCES.find((r) => r.value === task.recurrence)?.label
+    : describe(ruleFor(task.recurrence, task.repeatDays, when));
 
 type Props = {
   task: Task;
@@ -53,7 +60,7 @@ export function TaskRow({ task, onToggle, onEdit, onSnooze }: Props) {
           {task.category && task.category !== 'other' ? <Badge label={category.label} color={category.color} bg={category.tint} /> : null}
           {task.priority && task.priority !== 'low' ? <Badge label={priority.label} color={C.ink} bg={C.paper2} /> : null}
           {task.alarmEnabled !== false && !task.completed ? <Badge label="⏰ Rings" color={C.paper} bg={C.accent} /> : null}
-          {repeats ? <Badge label={`↻ ${RECURRENCES.find((r) => r.value === task.recurrence)?.label}`} color={C.teal} bg="#cfe6df" /> : null}
+          {repeats ? <Badge label={`↻ ${repeatLabel(task, when)}`} color={C.teal} bg="#cfe6df" /> : null}
           {late ? <Badge label="Late" color={C.paper} bg={C.accentD} /> : null}
           {task.isExpired ? <Badge label="Expired" color={C.paper} bg={C.ink} /> : null}
           {task.alarmSnoozedCount ? <Badge label={`Snoozed ×${task.alarmSnoozedCount}`} color={C.ink} bg={C.paper2} /> : null}

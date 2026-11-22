@@ -24,6 +24,17 @@ type Props = {
   onDelete?: (id: string) => void;
 };
 
+const EARLY = [
+  { minutes: 0, label: 'Off' },
+  { minutes: 5, label: '5 min' },
+  { minutes: 15, label: '15 min' },
+  { minutes: 30, label: '30 min' },
+  { minutes: 60, label: '1 hour' },
+  { minutes: 1440, label: '1 day' },
+];
+const DAY_LETTERS =['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 const defaultWhen = (day?: Date) => {
   const d = day ? new Date(day) : new Date();
   if (!day) d.setDate(d.getDate() + 1);
@@ -41,6 +52,8 @@ export function TaskSheet({ visible, task, prefilledDate, onSave, onCancel, onDe
   const [priority, setPriority] = useState<TaskPriority>('low');
   const [alarm, setAlarm] = useState(false);
   const [recurrence, setRecurrence] = useState<RecurrenceType>('none');
+  const [repeatDays, setRepeatDays] = useState<number[]>([]);
+  const [early, setEarly] = useState(0);
   const [picker, setPicker] = useState<'date' | 'time' | null>(null);
   const [errors, setErrors] = useState<{ title?: string; when?: string }>({});
   const [suggestions, setSuggestions] = useState<TaskSuggestion[]>([]);
@@ -56,6 +69,8 @@ export function TaskSheet({ visible, task, prefilledDate, onSave, onCancel, onDe
     setCategory(task?.category ?? 'other');
     setPriority(task?.priority ?? 'low');
     setRecurrence(task?.recurrence ?? 'none');
+    setRepeatDays(task?.recurrence === 'days' ? task.repeatDays ?? [] : []);
+    setEarly(task?.earlyMinutes ?? 0);
     setAlarm(task ? task.alarmEnabled !== false : false);
     setPicker(null);
     setErrors({});
@@ -87,6 +102,8 @@ export function TaskSheet({ visible, task, prefilledDate, onSave, onCancel, onDe
       category,
       priority,
       recurrence,
+      repeatDays: recurrence === 'days' ? repeatDays : undefined,
+      earlyMinutes: early,
       enableAlarm: alarm,
     });
   };
@@ -240,12 +257,48 @@ export function TaskSheet({ visible, task, prefilledDate, onSave, onCancel, onDe
           {alarm ? '> Rings like an alarm until you dismiss or snooze it.' : '> A notification, repeated 5 and 10 min later if ignored.'}
         </Txt>
 
+        <FieldLabel>Heads-up before</FieldLabel>
+        <View style={styles.wrap}>
+          {EARLY.map((e) => (
+            <Chip key={e.minutes} label={e.label} active={early === e.minutes} color={C.ink} onPress={() => setEarly(e.minutes)} />
+          ))}
+        </View>
+        {early ? <Txt v="mono" style={styles.note}>{`> An extra notification ${EARLY.find((e) => e.minutes === early)?.label.toLowerCase()} before, every time it's due.`}</Txt> : null}
+
         <FieldLabel>Repeat</FieldLabel>
         <View style={styles.wrap}>
           {RECURRENCES.map((r) => (
-            <Chip key={r.value} label={r.label} active={recurrence === r.value} color={C.teal} onPress={() => setRecurrence(r.value)} />
+            <Chip
+              key={r.value}
+              label={r.label}
+              active={recurrence === r.value}
+              color={C.teal}
+              onPress={() => {
+                setRecurrence(r.value);
+                if (r.value === 'days' && !repeatDays.length) setRepeatDays([when.getDay()]); // start with the chosen date's weekday
+              }}
+            />
           ))}
         </View>
+        {recurrence === 'days' ? (
+          <View style={styles.days} accessibilityLabel="Repeat on these days">
+            {DAY_LETTERS.map((letter, day) => {
+              const on = repeatDays.includes(day);
+              return (
+                <Pressable
+                  key={day}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: on }}
+                  accessibilityLabel={DAY_NAMES[day]}
+                  // Keep at least one day picked.
+                  onPress={() => setRepeatDays(on ? (repeatDays.length > 1 ? repeatDays.filter((d) => d !== day) : repeatDays) : [...repeatDays, day].sort())}
+                  style={[styles.day, on && styles.dayOn]}>
+                  <Txt v="cond" color={on ? C.paper : C.ink}>{letter}</Txt>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
         <Txt v="mono" style={styles.note}>{`> ${RECURRENCES.find((r) => r.value === recurrence)?.note.replace('Rings', alarm ? 'Rings' : 'Reminds you')}`}</Txt>
 
         {alarm ? (
@@ -329,6 +382,9 @@ const styles = StyleSheet.create({
   stepper: { alignItems: 'center', gap: 6 },
   ampm: { gap: 10, marginLeft: 8 },
   note: { fontSize: 12, color: C.mute, marginTop: 10 },
+  days: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, paddingRight: 4 },
+  day: { width: 40, height: 40, borderRadius: 20, borderWidth: BW, borderColor: C.ink, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center' },
+  dayOn: { backgroundColor: C.teal },
   test: { alignSelf: 'flex-start', marginTop: 12 },
   soundRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingRight: 4, paddingBottom: 4 },
 });
