@@ -10,22 +10,13 @@ export class RecurrenceService {
             return null;
         }
 
-        const currentDate = new Date(task.dateTime);
-        const interval = task.recurrenceInterval || 1;
-
-        switch (task.recurrence) {
-            case 'daily':
-                currentDate.setDate(currentDate.getDate() + interval);
-                break;
-            case 'weekly':
-                currentDate.setDate(currentDate.getDate() + (7 * interval));
-                break;
-            case 'monthly':
-                currentDate.setMonth(currentDate.getMonth() + interval);
-                break;
-        }
-
-        return currentDate;
+        // Every repeat type reminds daily ("7 days" / "30 days" just stop at their deadline),
+        // matching the native alarm. Skip days already gone so a late tick never schedules the past.
+        const next = new Date(task.dateTime);
+        const now = Date.now();
+        do next.setDate(next.getDate() + 1);
+        while (next.getTime() <= now);
+        return next;
     }
 
     /**
@@ -64,6 +55,7 @@ export class RecurrenceService {
             priority: completedTask.priority,
             recurrence: completedTask.recurrence,
             recurrenceInterval: completedTask.recurrenceInterval,
+            alarmEnabled: completedTask.alarmEnabled, // keep Notify vs Ring; it was lost, so repeats of a Notify task rang
             recurrenceParentId: completedTask.recurrenceParentId || completedTask.id,
             // Inherit deadline from parent task
             deadlineDate: completedTask.deadlineDate,

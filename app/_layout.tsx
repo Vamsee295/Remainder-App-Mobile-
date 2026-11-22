@@ -8,9 +8,10 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import 'react-native-reanimated';
 
+import { LoadingScreen } from '@/components/loading-screen';
 import { C } from '@/constants/theme';
 import { TasksProvider } from '@/hooks/use-tasks';
 import { NotificationService } from '@/services/notification-service';
@@ -27,6 +28,8 @@ const theme = {
 };
 
 export default function RootLayout() {
+  const [intro, setIntro] = useState(true);
+  const endIntro = useCallback(() => setIntro(false), []);
   const [loaded, error] = useFonts({
     Anton_400Regular,
     BarlowCondensed_700Bold,
@@ -54,6 +57,7 @@ export default function RootLayout() {
       <TasksProvider>
         <Stack screenOptions={{ headerShown: false }} />
       </TasksProvider>
+      {intro ? <LoadingScreen onDone={endIntro} /> : null}
       <StatusBar style="dark" />
     </ThemeProvider>
   );

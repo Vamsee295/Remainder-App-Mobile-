@@ -102,7 +102,13 @@ export default function TasksScreen() {
         sections={sections}
         keyExtractor={(item) => item.id}
         ListHeaderComponent={header}
-        ListEmptyComponent={<Empty {...EMPTY[filter]} />}
+        ListEmptyComponent={
+          category !== 'all' && tasks.length ? (
+            <Empty title={`Nothing in ${CATEGORIES.find((c) => c.value === category)?.label}`} hint="pick another type, or All types" />
+          ) : (
+            <Empty {...EMPTY[filter]} />
+          )
+        }
         renderSectionHeader={({ section }) => (
           <SectionHeader title={section.title} count={section.data.length} />
         )}

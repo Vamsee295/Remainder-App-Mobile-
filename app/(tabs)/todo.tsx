@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import React, { useEffect, useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import { FlatList, Keyboard, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Badge, Button, Card, Checkbox, Chip, Empty, Fab, Field, FieldLabel, IconButton, Screen, ScreenHeader, Sheet, Stamp, Txt } from '@/components/kit';
 import { MonthGrid } from '@/components/month-grid';
@@ -112,6 +112,7 @@ export default function TodoScreen() {
             <Button label="Add" arrow style={styles.flex} onPress={save} />
           </>
         }>
+        <ScrollView style={styles.shrink} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <FieldLabel>What needs doing?</FieldLabel>
         <Field
           value={text}
@@ -133,7 +134,10 @@ export default function TodoScreen() {
           <Chip
             label={deadline ? deadline.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'No deadline'}
             active={pickDate}
-            onPress={() => setPickDate(!pickDate)}
+            onPress={() => {
+              Keyboard.dismiss(); // room for the calendar
+              setPickDate(!pickDate);
+            }}
           />
           {deadline ? <IconButton icon="close-sharp" label="Remove deadline" onPress={() => setDeadline(undefined)} /> : null}
         </View>
@@ -142,6 +146,7 @@ export default function TodoScreen() {
             <MonthGrid selected={deadline ?? new Date()} minDate={new Date()} onSelect={setDeadline} />
           </Card>
         ) : null}
+        </ScrollView>
       </Sheet>
     </Screen>
   );
@@ -149,6 +154,7 @@ export default function TodoScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  shrink: { flexShrink: 1 },
   list: { padding: 20, paddingBottom: 110 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, borderBottomWidth: 1.5, borderStyle: 'dashed', borderColor: C.line },
   num: { width: 34 },

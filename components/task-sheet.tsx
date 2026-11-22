@@ -28,6 +28,8 @@ const defaultWhen = (day?: Date) => {
   const d = day ? new Date(day) : new Date();
   if (!day) d.setDate(d.getDate() + 1);
   d.setHours(9, 0, 0, 0);
+  // Today picked in the calendar after 9 am: use the next full hour so Save doesn't reject a past time.
+  if (d <= new Date()) d.setHours(new Date().getHours() + 1, 0, 0, 0);
   return d;
 };
 

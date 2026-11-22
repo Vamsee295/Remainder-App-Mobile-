@@ -4,6 +4,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -15,6 +16,7 @@ import {
   TextInput,
   TextInputProps,
   TextProps,
+  TextStyle,
   View,
   ViewProps,
   ViewStyle,
@@ -28,7 +30,7 @@ import { BW, C, F, R, SH } from '@/constants/theme';
 
 export function DotGrid() {
   return (
-    <Svg style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
+    <Svg width="100%" height="100%" style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
       <Defs>
         <Pattern id="dots" width={20} height={20} patternUnits="userSpaceOnUse">
           <Circle cx={2} cy={2} r={1} fill={C.ink} opacity={0.1} />
@@ -54,8 +56,14 @@ export function Screen({ children, style, ...rest }: ViewProps) {
 
 type Variant = keyof typeof text;
 
-export function Txt({ v = 'body', color, style, ...rest }: TextProps & { v?: Variant; color?: string }) {
-  return <Text style={[text[v], color ? { color } : null, style]} {...rest} />;
+export function Txt({ v = 'body', color, style, children, ...rest }: TextProps & { v?: Variant; color?: string }) {
+  // Same Android width bug as ScreenHeader: uppercase plain strings before measuring.
+  const caps = (text[v] as TextStyle).textTransform === 'uppercase' && typeof children === 'string';
+  return (
+    <Text style={[text[v], color ? { color } : null, style]} {...rest}>
+      {caps ? (children as string).toUpperCase() : children}
+    </Text>
+  );
 }
 
 /* ---------- Card ---------- */
@@ -164,9 +172,10 @@ export function ScreenHeader({ eyebrow, hand, title, mark, right }: { eyebrow: s
       </View>
       {hand ? <Text style={[text.hand, { marginTop: 10 }]}>{hand}</Text> : null}
       <View style={styles.heroTitle} accessibilityRole="header" accessibilityLabel={`${title} ${mark}`}>
-        <Text style={text.hero}>{title}</Text>
+        {/* Uppercase in JS: Android measures textTransform text at its lowercase width, so "Get it" wrapped. */}
+        <Text style={text.hero} numberOfLines={1}>{title.toUpperCase()}</Text>
         <View style={styles.mark}>
-          <Text style={[text.hero, { color: C.paper }]}>{mark}</Text>
+          <Text style={[text.hero, { color: C.paper }]} numberOfLines={1}>{mark.toUpperCase()}</Text>
         </View>
       </View>
     </View>
@@ -228,11 +237,22 @@ export function IconButton({ icon, onPress, label, color = C.ink }: { icon: keyo
 
 export function Sheet({ visible, title, onClose, children, footer }: { visible: boolean; title: string; onClose: () => void; children: React.ReactNode; footer?: React.ReactNode }) {
   const insets = useSafeAreaInsets();
+  // Android: the edge-to-edge modal is not resized for the keyboard, so pad the sheet by the keyboard height.
+  const [kb, setKb] = React.useState(0);
+  React.useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const show = Keyboard.addListener('keyboardDidShow', (e) => setKb(e.endCoordinates.height));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKb(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.overlay}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
+        <View style={[styles.sheet, { paddingBottom: (kb || insets.bottom) + 16 }]}>
           <View style={[styles.rowBetween, { marginBottom: 14 }]}>
             <Text style={text.hero}>{title}</Text>
             <IconButton icon="close-sharp" onPress={onClose} label="Close" />
