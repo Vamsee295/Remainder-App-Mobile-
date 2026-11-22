@@ -30,6 +30,7 @@ public class AlarmService extends Service {
     public static final String ACTION_RING = "com.vamsee05.remainderapp.RING";
     public static final String ACTION_DISMISS = "com.vamsee05.remainderapp.DISMISS";
     public static final String ACTION_SNOOZE = "com.vamsee05.remainderapp.SNOOZE";
+    public static final String ACTION_DONE = "com.vamsee05.remainderapp.DONE";
     /** Broadcast so the full-screen alarm closes when the ringing stops. */
     public static final String ACTION_STOPPED = "com.vamsee05.remainderapp.ALARM_STOPPED";
 
@@ -70,9 +71,10 @@ public class AlarmService extends Service {
             startVibration();
             handler.postDelayed(timeout, RING_TIMEOUT_MS);
         } else if (ACTION_SNOOZE.equals(action) && alarmId != null) {
-            int minutes = intent.getIntExtra("minutes", 5);
-            AlarmScheduler.schedule(this, alarmId + AlarmScheduler.SNOOZE_SUFFIX,
-                System.currentTimeMillis() + minutes * 60000L, soundUri, title, description, false, 0);
+            AlarmActions.snooze(this, alarmId, intent.getIntExtra("minutes", 5), soundUri, title, description, "ring");
+            finishAlarm();
+        } else if (ACTION_DONE.equals(action) && alarmId != null) {
+            AlarmActions.done(this, alarmId); // the app ticks the task off next time it opens
             finishAlarm();
         } else {
             // Dismiss, or a button was pressed after the alarm had already stopped.
@@ -149,12 +151,12 @@ public class AlarmService extends Service {
     private void onTimeout() {
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager != null && alarmId != null) {
-            manager.notify(alarmId.hashCode(), new NotificationCompat.Builder(this, MISSED_CHANNEL_ID)
+            manager.notify(alarmId.hashCode(), AlarmActions.withButtons(this, new NotificationCompat.Builder(this, MISSED_CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
                 .setContentTitle("Missed alarm: " + (title == null ? "Reminder" : title))
                 .setContentText(description)
                 .setContentIntent(openAppIntent())
-                .setAutoCancel(true)
+                .setAutoCancel(true), alarmId, title, description, "ring")
                 .build());
         }
         finishAlarm();
@@ -179,6 +181,7 @@ public class AlarmService extends Service {
             .setAutoCancel(false)
             .setContentIntent(fullScreenIntent)
             .setFullScreenIntent(fullScreenIntent, true)
+            .addAction(0, "Done", serviceIntent(ACTION_DONE, 5))
             .addAction(0, "Snooze 5 min", serviceIntent(ACTION_SNOOZE, 2))
             .addAction(0, "Dismiss", serviceIntent(ACTION_DISMISS, 3))
             .build();

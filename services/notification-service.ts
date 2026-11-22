@@ -88,9 +88,10 @@ export class NotificationService {
                 return null;
             }
 
-            // A real ringing alarm on Android (loops until dismissed or snoozed).
-            // Tasks saved with the alarm switched off skip this and get a quiet notification below.
-            if (Platform.OS === 'android' && AlarmModule && task.alarmEnabled !== false) {
+            // Android: our native scheduler handles both modes. Ring = full-screen ringing alarm,
+            // Notify = normal notification. Both get Done / Snooze buttons that work with the app closed
+            // (applied by applyNativeEvents in use-tasks), plus daily repeats and reboot restore.
+            if (Platform.OS === 'android' && AlarmModule) {
                 try {
                     const { StorageService } = require('./storage-service');
                     const soundUri = await StorageService.loadSelectedAlarmSound();
@@ -103,7 +104,8 @@ export class NotificationService {
                         task.title,
                         task.description || '',
                         repeats, // every repeat type rings daily; weekly / monthly just stop at the deadline
-                        task.deadlineDate ? new Date(task.deadlineDate).getTime() : 0
+                        task.deadlineDate ? new Date(task.deadlineDate).getTime() : 0,
+                        task.alarmEnabled !== false ? 'ring' : 'notify'
                     );
                     return [task.id];
                 } catch (error) {
@@ -121,25 +123,26 @@ export class NotificationService {
                 notificationBody += ` • ${deadlineInfo}`;
             }
 
-            // Schedule main notification
-            const mainId = await Notifications.scheduleNotificationAsync({
-                content: {
-                    title: `🔔 ${task.title}`,
-                    body: notificationBody,
-                    data: {
-                        taskId: task.id,
-                        isAlarm: true,
-                        hasDeadline: Boolean(task.deadlineDate),
+            // Main notification, once per day for repeating tasks (up to the deadline).
+            // ponytail: "Daily" is scheduled 14 days ahead and topped up when the app opens (rollRepeats in use-tasks).
+            const repeatDays = !task.recurrence || task.recurrence === 'none' ? 1 : task.recurrence === 'weekly' ? 7 : task.recurrence === 'monthly' ? 30 : 14;
+            const until = task.deadlineDate ? new Date(task.deadlineDate).getTime() : Infinity;
+            for (let day = 0; day < repeatDays; day++) {
+                const date = new Date(taskDate);
+                date.setDate(date.getDate() + day);
+                if (date.getTime() > until) break;
+                const id = await Notifications.scheduleNotificationAsync({
+                    content: {
+                        title: `🔔 ${task.title}`,
+                        body: notificationBody,
+                        data: { taskId: task.id, isAlarm: true, hasDeadline: Boolean(task.deadlineDate) },
+                        sound: true,
+                        priority: Notifications.AndroidNotificationPriority.MAX,
                     },
-                    sound: true,
-                    priority: Notifications.AndroidNotificationPriority.MAX,
-                },
-                trigger: {
-                    type: Notifications.SchedulableTriggerInputTypes.DATE,
-                    date: taskDate,
-                },
-            });
-            notificationIds.push(mainId);
+                    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date },
+                });
+                notificationIds.push(id);
+            }
 
             // Schedule 1st auto-snooze (+5 minutes)
             const snooze1Date = new Date(taskDate.getTime() + 5 * 60000);
@@ -175,11 +178,21 @@ export class NotificationService {
             });
             notificationIds.push(snooze2Id);
 
-            console.log(`Scheduled 3 notifications for task: ${task.title}`);
+            console.log(`Scheduled ${notificationIds.length} notifications for task: ${task.title}`);
             return notificationIds;
         } catch (error) {
             console.error('Error scheduling notification:', error);
             return null;
+        }
+    }
+
+    /** Done / Snooze taps made from notifications or the alarm screen since the last call (Android only). */
+    static async consumeNativeEvents(): Promise<{ id: string; type: 'done' | 'snooze'; time: number }[]> {
+        if (Platform.OS !== 'android' || !AlarmModule?.consumeEvents) return [];
+        try {
+            return JSON.parse(await AlarmModule.consumeEvents());
+        } catch {
+            return [];
         }
     }
 
@@ -199,7 +212,8 @@ export class NotificationService {
             'Test alarm',
             'If you can hear this, alarms work.',
             false,
-            0
+            0,
+            'ring'
         );
     }
 

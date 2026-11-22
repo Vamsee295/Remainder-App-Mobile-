@@ -21,13 +21,26 @@ public final class AlarmScheduler {
     private static final String TAG = "AlarmScheduler";
     private static final String PREFS = "AlarmPrefsV2";
     static final String SNOOZE_SUFFIX = "#snooze";
+    /** "Still to do" follow-ups of a Notify reminder, 5 and 10 minutes after it. */
+    static final String FOLLOW_UP_SUFFIX = "#nag";
+    static final int FOLLOW_UPS = 2;
     static final long DAY_MS = 24L * 60 * 60 * 1000;
 
     private AlarmScheduler() {}
 
-    /** @return false when the system does not allow exact alarms (the caller should fall back). */
+    /** Ringing alarm (the original behaviour). */
     public static boolean schedule(Context context, String id, long time, String sound, String title,
                                    String description, boolean repeatDaily, long until) {
+        return schedule(context, id, time, sound, title, description, repeatDaily, until, "ring", 0);
+    }
+
+    /**
+     * @param mode     "ring" = full-screen ringing alarm, "notify" = normal notification with Done / Snooze
+     * @param followUp how many follow-ups already went out for this round (Notify only)
+     * @return false when the system does not allow exact alarms (the caller should fall back).
+     */
+    public static boolean schedule(Context context, String id, long time, String sound, String title,
+                                   String description, boolean repeatDaily, long until, String mode, int followUp) {
         AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
         if (alarmManager == null) return false;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) return false;
@@ -40,6 +53,8 @@ public final class AlarmScheduler {
             data.put("description", description == null ? "" : description);
             data.put("repeatDaily", repeatDaily);
             data.put("until", until);
+            data.put("mode", "notify".equals(mode) ? "notify" : "ring");
+            data.put("followUp", followUp);
             prefs(context).edit().putString(id, data.toString()).apply();
         } catch (Exception e) {
             Log.e(TAG, "Could not save alarm " + id, e);
@@ -57,13 +72,30 @@ public final class AlarmScheduler {
         return true;
     }
 
-    /** Cancels the alarm and any snooze that came from it. */
+    /** Cancels the alarm and any snooze or follow-up that came from it. */
     public static void cancel(Context context, String id) {
+        drop(context, id, id + SNOOZE_SUFFIX, id + FOLLOW_UP_SUFFIX);
+    }
+
+    /** Cancels this round's snooze and follow-ups but keeps the main (possibly repeating) alarm. */
+    public static void cancelFollowUps(Context context, String id) {
+        drop(context, id + SNOOZE_SUFFIX, id + FOLLOW_UP_SUFFIX);
+    }
+
+    private static void drop(Context context, String... keys) {
         AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
-        for (String key : new String[]{id, id + SNOOZE_SUFFIX}) {
+        for (String key : keys) {
             if (alarmManager != null) alarmManager.cancel(firePendingIntent(context, key));
             prefs(context).edit().remove(key).apply();
         }
+    }
+
+    /** "task#snooze" / "task#nag" -> "task": the id the app knows the task by. */
+    static String baseId(String alarmId) {
+        for (String suffix : new String[]{SNOOZE_SUFFIX, FOLLOW_UP_SUFFIX}) {
+            if (alarmId.endsWith(suffix)) return alarmId.substring(0, alarmId.length() - suffix.length());
+        }
+        return alarmId;
     }
 
     public static JSONObject load(Context context, String id) {
@@ -87,7 +119,7 @@ public final class AlarmScheduler {
 
         if (data.optBoolean("repeatDaily", false) && (until == 0 || next <= until)) {
             schedule(context, id, next, data.optString("sound"), data.optString("title"),
-                data.optString("description"), true, until);
+                data.optString("description"), true, until, data.optString("mode", "ring"), 0);
         } else {
             prefs(context).edit().remove(id).apply();
         }
@@ -115,7 +147,7 @@ public final class AlarmScheduler {
                 time = now + 15000; // missed while the phone was off: ring shortly after boot
             }
             schedule(context, id, time, data.optString("sound"), data.optString("title"),
-                data.optString("description"), repeat, until);
+                data.optString("description"), repeat, until, data.optString("mode", "ring"), data.optInt("followUp", 0));
         }
     }
 

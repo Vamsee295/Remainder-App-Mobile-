@@ -26,10 +26,24 @@ public class AlarmReceiver extends BroadcastReceiver {
             return;
         }
 
-        // The base id is what the app knows the task by; a snooze rings under the same task.
-        String baseId = alarmId.endsWith(AlarmScheduler.SNOOZE_SUFFIX)
-            ? alarmId.substring(0, alarmId.length() - AlarmScheduler.SNOOZE_SUFFIX.length())
-            : alarmId;
+        // The base id is what the app knows the task by; a snooze or follow-up belongs to the same task.
+        String baseId = AlarmScheduler.baseId(alarmId);
+
+        if ("notify".equals(data.optString("mode"))) {
+            int followUp = data.optInt("followUp", 0);
+            String title = data.optString("title", "Reminder");
+            String description = data.optString("description", "");
+            AlarmActions.showReminder(context, baseId, title, description, followUp > 0);
+            // Not done yet? Remind again in 5 minutes, up to FOLLOW_UPS times. Done / Snooze cancel these.
+            if (followUp < AlarmScheduler.FOLLOW_UPS) {
+                AlarmScheduler.schedule(context, baseId + AlarmScheduler.FOLLOW_UP_SUFFIX, System.currentTimeMillis() + 5 * 60000L,
+                    data.optString("sound"), title, description, false, 0, "notify", followUp + 1);
+            }
+            // A follow-up re-uses its own key for the next one; only the last follow-up is forgotten here.
+            boolean isFollowUp = alarmId.endsWith(AlarmScheduler.FOLLOW_UP_SUFFIX);
+            if (!isFollowUp || followUp >= AlarmScheduler.FOLLOW_UPS) AlarmScheduler.afterFired(context, alarmId, data);
+            return;
+        }
 
         Intent service = new Intent(context, AlarmService.class);
         service.setAction(AlarmService.ACTION_RING);

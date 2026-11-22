@@ -107,9 +107,10 @@ public class AlarmActivity extends AppCompatActivity {
         descriptionView = text("", 16, MUTED, Typeface.DEFAULT, 0f);
         root.addView(descriptionView, margins(10, 0));
 
-        TextView dismiss = button("DISMISS", ACCENT, PAPER);
-        dismiss.setOnClickListener(v -> sendToService(AlarmService.ACTION_DISMISS, 0));
-        root.addView(dismiss, margins(44, 0));
+        TextView done = button("✓  DONE", ACCENT, PAPER);
+        done.setContentDescription("Done: stop the alarm and mark the task done");
+        done.setOnClickListener(v -> sendToService(AlarmService.ACTION_DONE, 0));
+        root.addView(done, margins(44, 0));
 
         LinearLayout snoozeRow = new LinearLayout(this);
         snoozeRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -124,6 +125,14 @@ public class AlarmActivity extends AppCompatActivity {
         snoozeRow.addView(snooze5, left);
         snoozeRow.addView(snooze10, right);
         root.addView(snoozeRow, margins(14, 0));
+
+        // Stop the noise without finishing the task.
+        TextView dismiss = text("Dismiss without marking done", 15, MUTED, Typeface.MONOSPACE, 0f);
+        dismiss.setGravity(Gravity.CENTER);
+        dismiss.setPadding(0, dp(14), 0, dp(14));
+        dismiss.setClickable(true);
+        dismiss.setOnClickListener(v -> sendToService(AlarmService.ACTION_DISMISS, 0));
+        root.addView(dismiss, margins(18, 0));
 
         return root;
     }

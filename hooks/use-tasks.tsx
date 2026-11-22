@@ -3,6 +3,7 @@
  * each action re-reads it, changes it, writes it, then refreshes state.
  */
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 
 import { AlarmService } from '@/services/alarm-service';
 import { NotificationService } from '@/services/notification-service';
@@ -96,6 +97,17 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } else {
+        // Un-ticking a repeat: drop the next occurrence that ticking created, or there would be two.
+        if (RecurrenceService.isRecurringTask(task)) {
+          const series = task.recurrenceParentId || task.id;
+          const spawned = (await StorageService.loadTasks()).filter(
+            (t) => t.id !== task.id && !t.completed && (t.recurrenceParentId || t.id) === series && t.dateTime > task.dateTime,
+          );
+          for (const t of spawned) {
+            await cancel(t);
+            await StorageService.deleteTask(t.id);
+          }
+        }
         await schedule(updated);
       }
       await StorageService.updateTask(updated);
@@ -123,26 +135,63 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
       await StorageService.updateTask(updated);
     });
 
+  /** Apply Done / Snooze taps made on notifications or the alarm screen while the app was closed. */
+  const applyNativeEvents = async () => {
+    const events = await NotificationService.consumeNativeEvents();
+    for (const event of events) {
+      const task = (await StorageService.loadTasks()).find((t) => t.id === event.id);
+      if (!task || task.completed) continue;
+      if (event.type === 'done') {
+        await toggleTask(task.id); // completes it, stops its alarm, creates the next repeat
+      } else if (event.type === 'snooze' && event.time) {
+        // The phone already rescheduled it; just show the new time.
+        await StorageService.updateTask({ ...task, dateTime: new Date(event.time).toISOString(), alarmSnoozedCount: (task.alarmSnoozedCount || 0) + 1 });
+      }
+    }
+    if (events.length) await reload();
+  };
+
   useEffect(() => {
     reload();
 
     // Weekly / monthly alarms stop after their deadline: mark them expired.
     const checkExpired = async () => {
       try {
+        await applyNativeEvents(); // first, so a snoozed repeat isn't treated as overdue below
         const expired = AlarmService.getExpiredTasks(await StorageService.loadTasks());
-        if (expired.length) {
-          await StorageService.updateExpiredTasks(expired.map((t) => t.id));
-          await reload();
+        if (expired.length) await StorageService.updateExpiredTasks(expired.map((t) => t.id));
+
+        // A repeating task whose time (and its 10-min follow-ups) has passed moves to its next day,
+        // so the list shows the next reminder instead of "Late", and its reminders get topped up.
+        const stale = (await StorageService.loadTasks()).filter(
+          (t) => RecurrenceService.isRecurringTask(t) && !t.completed && !t.isExpired && new Date(t.dateTime).getTime() < Date.now() - 15 * 60000,
+        );
+        for (const task of stale) {
+          const next = RecurrenceService.getNextOccurrence(task);
+          await cancel(task);
+          if (!next || (task.deadlineDate && next > new Date(task.deadlineDate))) {
+            await StorageService.updateTask({ ...task, isExpired: true });
+            continue;
+          }
+          const moved: Task = { ...task, dateTime: next.toISOString(), alarmSnoozedCount: 0 };
+          await schedule(moved);
+          await StorageService.updateTask(moved);
         }
+        if (expired.length || stale.length) await reload();
       } catch (error) {
         console.error('Error checking expired alarms:', error);
       }
     };
     checkExpired();
     const interval = setInterval(checkExpired, 5 * 60 * 1000);
+    // Coming back to the app (e.g. after tapping Done on a notification) applies those taps at once.
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'active') checkExpired();
+    });
 
     return () => {
       clearInterval(interval);
+      appState.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

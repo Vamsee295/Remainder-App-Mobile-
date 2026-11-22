@@ -28,15 +28,21 @@ public class AlarmModule extends ReactContextBaseJavaModule {
      */
     @ReactMethod
     public void setAlarm(String alarmId, double timestamp, String soundUri, String title, String description,
-                         boolean repeatDaily, double until, Promise promise) {
+                         boolean repeatDaily, double until, String mode, Promise promise) {
         try {
             boolean ok = AlarmScheduler.schedule(reactContext, alarmId, (long) timestamp, soundUri, title,
-                description, repeatDaily, (long) until);
+                description, repeatDaily, (long) until, mode, 0);
             if (ok) promise.resolve(alarmId);
             else promise.reject("PERMISSION_ERROR", "Exact alarms are not allowed for this app");
         } catch (Exception e) {
             promise.reject("ALARM_ERROR", e.getMessage());
         }
+    }
+
+    /** Done / Snooze taps made outside the app since the last call, as a JSON array string. Empties the queue. */
+    @ReactMethod
+    public void consumeEvents(Promise promise) {
+        promise.resolve(AlarmActions.consume(reactContext));
     }
 
     @ReactMethod
